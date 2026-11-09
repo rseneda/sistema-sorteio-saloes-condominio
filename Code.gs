@@ -1612,3 +1612,410 @@ function atualizarResultados_() {
   aba.autoResizeColumns(1, 5);
 
 }
+
+
+/************************************************************
+ 14. APLICATIVO ADMINISTRATIVO – INTEGRAÇÃO
+************************************************************/
+
+const EMAILS_AUTORIZADOS = [
+  "rseneda@gmail.com"
+];
+
+const AMBIENTES_PAINEL = [
+  "Gourmet – Natal",
+  "Festas – Natal",
+  "Gourmet – Ano Novo",
+  "Festas – Ano Novo"
+];
+
+
+/************************************************************
+ VERIFICAR ACESSO DO ADMINISTRADOR
+************************************************************/
+
+function verificarAcessoPainel_() {
+
+  const email = Session.getActiveUser()
+    .getEmail()
+    .toLowerCase()
+    .trim();
+
+  if (
+    !email ||
+    !EMAILS_AUTORIZADOS.includes(email)
+  ) {
+    throw new Error(
+      "Acesso não autorizado. Entre com uma conta Google autorizada."
+    );
+  }
+
+  return email;
+}
+
+
+/************************************************************
+ 15. ABRIR O APLICATIVO
+************************************************************/
+
+function doGet() {
+
+  try {
+
+    verificarAcessoPainel_();
+
+    return HtmlService
+      .createHtmlOutputFromFile("Index")
+      .setTitle("Painel Administrativo – Sorteio dos Salões")
+      .addMetaTag(
+        "viewport",
+        "width=device-width, initial-scale=1"
+      );
+
+  } catch (erro) {
+
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:Arial;text-align:center;padding:60px">' +
+      '<h2>Acesso restrito</h2>' +
+      '<p>Esta área é exclusiva para administradores autorizados.</p>' +
+      '<p>Entre com a conta Google cadastrada para acessar o sistema.</p>' +
+      '</div>'
+    ).setTitle("Acesso restrito");
+
+  }
+
+}
+
+
+/************************************************************
+ 16. LOCALIZAR GANHADOR ATIVO
+************************************************************/
+
+function localizarGanhadorPainel_(ambiente) {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const historico = ss.getSheetByName(
+    "Histórico dos Sorteios"
+  );
+
+  if (!historico) return null;
+
+  const dados = historico.getDataRange().getValues();
+
+  for (let i = dados.length - 1; i >= 1; i--) {
+
+    if (
+      dados[i][1] === ambiente &&
+      dados[i][5] === "Ganhador"
+    ) {
+
+      return {
+        nome: String(dados[i][3]),
+        apartamento: String(dados[i][4]),
+        data: dados[i][0]
+      };
+
+    }
+
+  }
+
+  return null;
+
+}
+
+
+/************************************************************
+ 17. DADOS GERAIS DO PAINEL
+************************************************************/
+
+function obterDadosPainel() {
+
+  verificarAcessoPainel_();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  criarAbas();
+
+  atualizarListas_(false);
+
+  const nomesAbas = [
+    "Gourmet – Natal",
+    "Festas – Natal",
+    "Gourmet – Ano Novo",
+    "Festas – Ano Novo"
+  ];
+
+  const quantidades = [];
+
+  const ganhadores = [];
+
+  nomesAbas.forEach(ambiente => {
+
+    const aba = ss.getSheetByName(ambiente);
+
+    quantidades.push(
+      Math.max(0, aba.getLastRow() - 1)
+    );
+
+    ganhadores.push(
+      localizarGanhadorPainel_(ambiente)
+    );
+
+  });
+
+  return {
+    quantidades: quantidades,
+    ganhadores: ganhadores
+  };
+
+}
+
+
+/************************************************************
+ 18. EXECUTAR SORTEIO PELO PAINEL
+************************************************************/
+
+function executarSorteioPainel(indice) {
+
+  verificarAcessoPainel_();
+
+  indice = Number(indice);
+
+  if (
+    !Number.isInteger(indice) ||
+    indice < 0 ||
+    indice >= AMBIENTES_PAINEL.length
+  ) {
+    throw new Error("Ambiente inválido.");
+  }
+
+  const ambiente = AMBIENTES_PAINEL[indice];
+
+  const resultado = sortearAmbiente_(ambiente);
+
+  atualizarResultados_();
+
+  return resultado;
+
+}
+
+
+/************************************************************
+ 19. CONSULTAR RESULTADOS
+************************************************************/
+
+function obterResultadosPainel() {
+
+  verificarAcessoPainel_();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  criarAbas();
+
+  atualizarResultados_();
+
+  const aba = ss.getSheetByName(
+    "Resultados dos Sorteios"
+  );
+
+  const dados = aba.getDataRange().getValues();
+
+  return dados.slice(1).map(linha => ({
+
+    ambiente: String(linha[0] || ""),
+
+    nome: String(linha[1] || ""),
+
+    apartamento: String(linha[2] || ""),
+
+    data: linha[3] instanceof Date
+      ? Utilities.formatDate(
+          linha[3],
+          Session.getScriptTimeZone(),
+          "dd/MM/yyyy HH:mm"
+        )
+      : "",
+
+    situacao: String(linha[4] || "")
+
+  }));
+
+}
+
+
+/************************************************************
+ 20. CONSULTAR HISTÓRICO
+************************************************************/
+
+function obterHistoricoPainel() {
+
+  verificarAcessoPainel_();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  criarAbas();
+
+  const aba = ss.getSheetByName(
+    "Histórico dos Sorteios"
+  );
+
+  const dados = aba.getDataRange().getValues();
+
+  return dados.slice(1).map(linha => ({
+
+    data: linha[0] instanceof Date
+      ? Utilities.formatDate(
+          linha[0],
+          Session.getScriptTimeZone(),
+          "dd/MM/yyyy HH:mm:ss"
+        )
+      : "",
+
+    ambiente: String(linha[1] || ""),
+
+    tipo: String(linha[2] || ""),
+
+    nome: String(linha[3] || ""),
+
+    apartamento: String(linha[4] || ""),
+
+    situacao: String(linha[5] || ""),
+
+    observacao: String(linha[6] || "")
+
+  }));
+
+}
+
+
+/************************************************************
+ 21. CONSULTAR GANHADOR PARA DESISTÊNCIA
+************************************************************/
+
+function obterGanhadorPainel(indice) {
+
+  verificarAcessoPainel_();
+
+  indice = Number(indice);
+
+  if (
+    !Number.isInteger(indice) ||
+    indice < 0 ||
+    indice >= AMBIENTES_PAINEL.length
+  ) {
+    throw new Error("Ambiente inválido.");
+  }
+
+  return localizarGanhadorPainel_(
+    AMBIENTES_PAINEL[indice]
+  );
+
+}
+
+
+/************************************************************
+ 22. REGISTRAR DESISTÊNCIA PELO PAINEL
+************************************************************/
+
+function registrarDesistenciaPainel(indice) {
+
+  verificarAcessoPainel_();
+
+  indice = Number(indice);
+
+  if (
+    !Number.isInteger(indice) ||
+    indice < 0 ||
+    indice >= AMBIENTES_PAINEL.length
+  ) {
+    throw new Error("Ambiente inválido.");
+  }
+
+  const ambiente = AMBIENTES_PAINEL[indice];
+
+  const bloqueio = LockService.getScriptLock();
+
+  if (!bloqueio.tryLock(10000)) {
+
+    throw new Error(
+      "Outra operação está em andamento. Tente novamente."
+    );
+
+  }
+
+  try {
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    const historico = ss.getSheetByName(
+      "Histórico dos Sorteios"
+    );
+
+    const dados = historico.getDataRange().getValues();
+
+    let linhaGanhador = -1;
+
+    for (let i = dados.length - 1; i >= 1; i--) {
+
+      if (
+        dados[i][1] === ambiente &&
+        dados[i][5] === "Ganhador"
+      ) {
+
+        linhaGanhador = i + 1;
+
+        break;
+
+      }
+
+    }
+
+    if (linhaGanhador < 0) {
+
+      throw new Error(
+        "Não existe ganhador ativo neste ambiente."
+      );
+
+    }
+
+    const ganhador = dados[linhaGanhador - 1];
+
+    // Registrar a desistência no histórico.
+
+    historico.getRange(linhaGanhador, 6)
+      .setValue("Desistiu");
+
+    historico.getRange(linhaGanhador, 7)
+      .setValue(
+        "Desistência registrada em " +
+        Utilities.formatDate(
+          new Date(),
+          Session.getScriptTimeZone(),
+          "dd/MM/yyyy HH:mm"
+        )
+      );
+
+    // Realizar novo sorteio sem adquirir outro bloqueio.
+
+    const resultado = sortearAmbienteInterno_(ambiente);
+
+    atualizarResultados_();
+
+    return (
+      "DESISTÊNCIA REGISTRADA\n\n" +
+      "Ganhador anterior: " + ganhador[3] +
+      "\nApartamento: " + ganhador[4] +
+      "\n\n" + resultado
+    );
+
+  } finally {
+
+    if (bloqueio.hasLock()) {
+      bloqueio.releaseLock();
+    }
+
+  }
+
+}
+
