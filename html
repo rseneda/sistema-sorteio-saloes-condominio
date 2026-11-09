@@ -1,0 +1,649 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --navy: #142b43;
+      --navy-light: #203e5d;
+      --gold: #c9a45c;
+      --bg: #f4f6f9;
+      --white: #fff;
+      --text: #25364a;
+      --muted: #8290a0;
+      --border: #e8edf2;
+      --green: #26845c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    aside {
+      width: 250px;
+      background: var(--navy);
+      color: white;
+      padding: 30px 20px;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      padding: 5px 10px 30px;
+      border-bottom: 1px solid #ffffff22;
+    }
+
+    .brand .symbol {
+      color: var(--gold);
+      font-size: 28px;
+    }
+
+    .brand h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 21px;
+      margin: 10px 0 4px;
+    }
+
+    .brand p {
+      color: #aebdca;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      margin: 0;
+    }
+
+    .menu-label {
+      color: #8299ae;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      margin: 30px 10px 12px;
+    }
+
+    .nav {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      color: #cbd5df;
+      padding: 13px 12px;
+      border-radius: 8px;
+      margin: 4px 0;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .nav.active, .nav:hover {
+      background: #ffffff16;
+      color: white;
+    }
+
+    main {
+      flex: 1;
+      min-width: 0;
+      padding: 35px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 35px;
+    }
+
+    .topbar small {
+      color: var(--muted);
+    }
+
+    .user {
+      background: white;
+      border: 1px solid var(--border);
+      padding: 10px 15px;
+      border-radius: 30px;
+      font-size: 12px;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      color: var(--navy);
+      font-size: 32px;
+      margin: 0 0 8px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 28px;
+      font-size: 14px;
+    }
+
+    .welcome {
+      background: linear-gradient(115deg, #142b43, #315477);
+      color: white;
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 25px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .welcome:after {
+      content: "✦";
+      position: absolute;
+      right: 35px;
+      top: -35px;
+      color: #c9a45c33;
+      font-size: 180px;
+    }
+
+    .welcome small {
+      color: #d7c18f;
+      letter-spacing: 2px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .welcome h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 27px;
+      margin: 12px 0 8px;
+    }
+
+    .welcome p {
+      color: #d3dce5;
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .card-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .card-number {
+      color: var(--navy);
+      font-size: 30px;
+      font-weight: 800;
+      margin: 10px 0 5px;
+    }
+
+    .card-note {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 30px 0 15px;
+      gap: 10px;
+    }
+
+    .section-title h2 {
+      color: var(--navy);
+      font-family: 'Playfair Display', serif;
+      font-size: 21px;
+      margin: 0;
+    }
+
+    .environment-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .environment {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      padding: 22px;
+    }
+
+    .environment h3 {
+      color: var(--navy);
+      font-size: 16px;
+      margin: 0 0 7px;
+    }
+
+    .environment p {
+      color: var(--muted);
+      font-size: 12px;
+      margin: 0 0 18px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 30px;
+      background: #f0f3f6;
+      color: #647487;
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .status.done {
+      background: #e6f5ed;
+      color: var(--green);
+    }
+
+    button.action {
+      background: var(--navy);
+      color: white;
+      border: 0;
+      border-radius: 7px;
+      padding: 12px 16px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.action:hover {
+      background: var(--navy-light);
+    }
+
+    button.gold {
+      background: var(--gold);
+      color: #182b3d;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .panel {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+      margin-top: 20px;
+    }
+
+    .panel h2 {
+      color: var(--navy);
+      font-family: 'Playfair Display', serif;
+      margin-top: 0;
+    }
+
+    .winner {
+      background: #f8f5ed;
+      border: 1px solid #eadfc7;
+      border-radius: 12px;
+      padding: 25px;
+      text-align: center;
+      margin-top: 18px;
+    }
+
+    .winner small {
+      color: #9b7a3e;
+      letter-spacing: 2px;
+      font-weight: 700;
+    }
+
+    .winner h2 {
+      color: var(--navy);
+      font-size: 27px;
+      margin: 12px 0 5px;
+    }
+
+    .winner p {
+      color: #647487;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 13px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .hidden { display: none !important; }
+
+    .notice {
+      background: #eef3f8;
+      color: #52677d;
+      padding: 13px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-top: 15px;
+    }
+
+    #mensagem {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--navy);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 10px;
+      box-shadow: 0 5px 20px #0002;
+      z-index: 10;
+      max-width: 350px;
+      white-space: pre-line;
+    }
+
+    @media(max-width: 950px) {
+      .cards { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media(max-width: 650px) {
+      .layout { display: block; }
+      aside { width: 100%; padding: 15px; }
+      .brand { padding-bottom: 15px; }
+      .menu-label { margin-top: 15px; }
+      main { padding: 20px 15px; }
+      .environment-grid { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      h1 { font-size: 27px; }
+      .welcome h2 { font-size: 22px; }
+      table { font-size: 11px; }
+      th, td { padding: 9px 6px; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="layout">
+
+  <aside>
+    <div class="brand">
+      <div class="symbol">✦</div>
+      <h2>Sorteio dos Salões</h2>
+      <p>PAINEL ADMINISTRATIVO</p>
+    </div>
+
+    <div class="menu-label">MENU PRINCIPAL</div>
+    <button class="nav active" onclick="abrirPagina('inicio',this)">⌂ &nbsp; Visão geral</button>
+    <button class="nav" onclick="abrirPagina('sorteios',this)">◇ &nbsp; Sorteios</button>
+    <button class="nav" onclick="abrirPagina('resultados',this)">☆ &nbsp; Resultados</button>
+    <button class="nav" onclick="abrirPagina('historico',this)">▤ &nbsp; Histórico</button>
+    <button class="nav" onclick="abrirPagina('desistencia',this)">↻ &nbsp; Desistências</button>
+
+    <div class="menu-label">SISTEMA</div>
+    <button class="nav" onclick="atualizarPainel()">⟳ &nbsp; Atualizar dados</button>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div>
+        <small>ADMINISTRAÇÃO / SORTEIOS DE FIM DE ANO</small>
+      </div>
+      <div class="user">● &nbsp; Área administrativa</div>
+    </div>
+
+    <section id="inicio">
+      <div class="welcome">
+        <small>GESTÃO DE EVENTOS</small>
+        <h2>Natal e Ano Novo</h2>
+        <p>Central de controle dos sorteios dos salões do condomínio.</p>
+      </div>
+
+      <h1>Visão geral</h1>
+      <p class="subtitle">Acompanhe as inscrições e a situação dos quatro ambientes.</p>
+
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">GOURMET · NATAL</div>
+          <div class="card-number" id="q0">—</div>
+          <div class="card-note">apartamentos inscritos</div>
+        </div>
+        <div class="card">
+          <div class="card-label">FESTAS · NATAL</div>
+          <div class="card-number" id="q1">—</div>
+          <div class="card-note">apartamentos inscritos</div>
+        </div>
+        <div class="card">
+          <div class="card-label">GOURMET · ANO NOVO</div>
+          <div class="card-number" id="q2">—</div>
+          <div class="card-note">apartamentos inscritos</div>
+        </div>
+        <div class="card">
+          <div class="card-label">FESTAS · ANO NOVO</div>
+          <div class="card-number" id="q3">—</div>
+          <div class="card-note">apartamentos inscritos</div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <h2>Situação dos ambientes</h2>
+        <button class="action" onclick="atualizarPainel()">Atualizar</button>
+      </div>
+      <div class="environment-grid" id="resumoAmbientes"></div>
+    </section>
+
+    <section id="sorteios" class="hidden">
+      <h1>Sorteios</h1>
+      <p class="subtitle">Selecione o ambiente para realizar o sorteio.</p>
+      <div class="environment-grid" id="cardsSorteios"></div>
+      <div class="notice">Cada ambiente possui um sorteio independente. Um ganhador ativo impede um segundo sorteio no mesmo ambiente.</div>
+    </section>
+
+    <section id="resultados" class="hidden">
+      <h1>Resultados oficiais</h1>
+      <p class="subtitle">Ganhadores ativos registrados no sistema.</p>
+      <div class="panel" id="tabelaResultados">Carregando...</div>
+    </section>
+
+    <section id="historico" class="hidden">
+      <h1>Histórico dos sorteios</h1>
+      <p class="subtitle">Registros preservados de sorteios e desistências.</p>
+      <div class="panel" id="tabelaHistorico">Carregando...</div>
+    </section>
+
+    <section id="desistencia" class="hidden">
+      <h1>Registrar desistência</h1>
+      <p class="subtitle">A desistência exclui o apartamento somente do ambiente correspondente.</p>
+      <div class="panel">
+        <h2>Novo registro</h2>
+        <label for="ambienteDesistencia">Ambiente</label>
+        <p><select id="ambienteDesistencia" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font:inherit"></select></p>
+        <div id="ganhadorDesistencia" class="notice">Selecione um ambiente para consultar o ganhador ativo.</div>
+        <p><button class="action gold" onclick="registrarDesistencia()">Confirmar desistência e sortear novamente</button></p>
+      </div>
+    </section>
+
+    <div id="mensagem" class="hidden"></div>
+  </main>
+</div>
+
+<script>
+  const ambientes = [
+    "Gourmet – Natal",
+    "Festas – Natal",
+    "Gourmet – Ano Novo",
+    "Festas – Ano Novo"
+  ];
+
+  let dados = null;
+
+  function abrirPagina(id, botao) {
+    document.querySelectorAll('main section').forEach(el => el.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+    document.querySelectorAll('.nav').forEach(el => el.classList.remove('active'));
+    if (botao) botao.classList.add('active');
+
+    if (id === 'resultados') carregarResultados();
+    if (id === 'historico') carregarHistorico();
+    if (id === 'desistencia') carregarGanhadorDesistencia();
+  }
+
+  function mostrarMensagem(texto) {
+    const el = document.getElementById('mensagem');
+    el.textContent = texto;
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 6000);
+  }
+
+  function carregarPainel() {
+    google.script.run
+      .withSuccessHandler(res => {
+        dados = res;
+        renderizarPainel();
+      })
+      .withFailureHandler(err => mostrarMensagem('Erro: ' + err.message))
+      .obterDadosPainel();
+  }
+
+  function renderizarPainel() {
+    if (!dados) return;
+
+    ambientes.forEach((ambiente, i) => {
+      document.getElementById('q' + i).textContent = dados.quantidades[i];
+    });
+
+    document.getElementById('resumoAmbientes').innerHTML = '';
+    document.getElementById('cardsSorteios').innerHTML = '';
+
+    ambientes.forEach((ambiente, i) => {
+      const vencedor = dados.ganhadores[i];
+      const status = vencedor ? 'Sorteio realizado' : 'Aguardando sorteio';
+      const classe = vencedor ? 'status done' : 'status';
+
+      document.getElementById('resumoAmbientes').innerHTML += `
+        <div class="environment">
+          <h3>${ambiente}</h3>
+          <p>${dados.quantidades[i]} apartamentos inscritos</p>
+          <span class="${classe}">${status}</span>
+          ${vencedor ? `<div><b>${vencedor.nome}</b><br><small>Apartamento ${vencedor.apartamento}</small></div>` : ''}
+        </div>`;
+
+      document.getElementById('cardsSorteios').innerHTML += `
+        <div class="environment">
+          <h3>${ambiente}</h3>
+          <p>${dados.quantidades[i]} apartamentos inscritos</p>
+          <span class="${classe}">${status}</span>
+          ${vencedor ? `<div class="winner"><small>GANHADOR</small><h2>${vencedor.nome}</h2><p>Apartamento ${vencedor.apartamento}</p></div>` : ''}
+          <p><button class="action" onclick="sortear(${i})" ${vencedor ? 'disabled' : ''}>Realizar sorteio</button></p>
+        </div>`;
+    });
+
+    document.getElementById('ambienteDesistencia').innerHTML =
+      ambientes.map((a,i) => `<option value="${i}">${a}</option>`).join('');
+
+    carregarGanhadorDesistencia();
+  }
+
+  function atualizarPainel() {
+    mostrarMensagem('Atualizando informações...');
+    carregarPainel();
+  }
+
+  function sortear(i) {
+    if (!confirm('Confirma o sorteio de ' + ambientes[i] + '?')) return;
+
+    mostrarMensagem('Realizando sorteio...');
+    google.script.run
+      .withSuccessHandler(res => {
+        mostrarMensagem(res);
+        carregarPainel();
+        carregarResultados();
+      })
+      .withFailureHandler(err => mostrarMensagem('Erro: ' + err.message))
+      .executarSorteioPainel(i);
+  }
+
+  function carregarResultados() {
+    google.script.run
+      .withSuccessHandler(lista => {
+        let html = '<table><tr><th>AMBIENTE</th><th>GANHADOR</th><th>APARTAMENTO</th><th>SITUAÇÃO</th></tr>';
+        lista.forEach(item => {
+          html += `<tr><td>${item.ambiente}</td><td>${item.nome}</td><td>${item.apartamento}</td><td>${item.situacao}</td></tr>`;
+        });
+        document.getElementById('tabelaResultados').innerHTML = html + '</table>';
+      })
+      .withFailureHandler(err => mostrarMensagem('Erro: ' + err.message))
+      .obterResultadosPainel();
+  }
+
+  function carregarHistorico() {
+    google.script.run
+      .withSuccessHandler(lista => {
+        let html = '<table><tr><th>DATA</th><th>AMBIENTE</th><th>TIPO</th><th>NOME</th><th>APARTAMENTO</th><th>SITUAÇÃO</th></tr>';
+        lista.reverse().forEach(item => {
+          html += `<tr><td>${item.data}</td><td>${item.ambiente}</td><td>${item.tipo}</td><td>${item.nome}</td><td>${item.apartamento}</td><td>${item.situacao}</td></tr>`;
+        });
+        document.getElementById('tabelaHistorico').innerHTML = html + '</table>';
+      })
+      .withFailureHandler(err => mostrarMensagem('Erro: ' + err.message))
+      .obterHistoricoPainel();
+  }
+
+  function carregarGanhadorDesistencia() {
+    const campo = document.getElementById('ambienteDesistencia');
+    if (!campo || !campo.value) return;
+
+    google.script.run
+      .withSuccessHandler(item => {
+        const el = document.getElementById('ganhadorDesistencia');
+        el.textContent = item
+          ? 'Ganhador atual: ' + item.nome + ' — Apartamento ' + item.apartamento
+          : 'Não existe ganhador ativo neste ambiente.';
+      })
+      .withFailureHandler(err => mostrarMensagem('Erro: ' + err.message))
+      .obterGanhadorPainel(Number(campo.value));
+  }
+
+  function registrarDesistencia() {
+    const i = Number(document.getElementById('ambienteDesistencia').value);
+    if (!confirm('Confirma a desistência e o novo sorteio de ' + ambientes[i] + '?')) return;
+
+    google.script.run
+      .withSuccessHandler(res => {
+        mostrarMensagem(res);
+        carregarPainel();
+        carregarHistorico();
+      })
+      .withFailureHandler(err => mostrarMensagem('Erro: ' + err.message))
+      .registrarDesistenciaPainel(i);
+  }
+
+  document.getElementById('ambienteDesistencia')
+    .addEventListener('change', carregarGanhadorDesistencia);
+
+  carregarPainel();
+</script>
+</body>
+</html>
