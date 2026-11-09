@@ -8,17 +8,22 @@
  3. Cada ambiente possui seu próprio sorteio.
  4. Desistência exclui o ganhador somente daquele ambiente.
  5. Histórico dos sorteios é preservado.
- 6. Sorteios protegidos contra execuções simultâneas.
-************************************************************/
+ 6. Sorteios protegidos contra execução simultânea.
+ 7. A aba de respostas mantém todas as respostas do formulário.
+ 8. As abas dos ambientes mostram somente a inscrição válida
+    mais recente de cada apartamento.
+ ************************************************************/
 
+
+/************************************************************
+ CONFIGURAÇÃO
+ ************************************************************/
 
 const CONFIG = {
 
-  NOME_FORMULARIO:
-    "Inscrição – Sorteio dos Salões – Natal e Ano Novo",
+  NOME_FORMULARIO: "SORTEIO FIM DE ANO",
 
-  ABA_RESPOSTAS:
-    "Respostas ao formulário 2",
+  ABA_RESPOSTAS: "Respostas ao formulário 2",
 
   AMBIENTES: [
     "Salão Gourmet – Natal (25 pessoas)",
@@ -34,688 +39,544 @@ const CONFIG = {
     "Festas – Ano Novo",
     "Resultados dos Sorteios",
     "Histórico dos Sorteios"
-  ]
+  ],
 
+  PRAZO_INSCRICAO: {
+    MES: 12,
+    DIA: 10
+  }
 };
 
 
-const PROPRIEDADES =
-  PropertiesService.getScriptProperties();
-
-
 /************************************************************
- CONFIGURAÇÃO DO APLICATIVO ADMINISTRATIVO
-************************************************************/
+ EMAILS AUTORIZADOS AO PAINEL ADMINISTRATIVO
+ ************************************************************/
 
 const EMAILS_AUTORIZADOS = [
   "rseneda@gmail.com"
 ];
 
+
+/************************************************************
+ AMBIENTES DO PAINEL
+ ************************************************************/
+
 const AMBIENTES_PAINEL = [
-  "Gourmet – Natal",
-  "Festas – Natal",
-  "Gourmet – Ano Novo",
-  "Festas – Ano Novo"
+  "Salão Gourmet – Natal (25 pessoas)",
+  "Salão de Festas – Natal (50 pessoas)",
+  "Salão Gourmet – Ano Novo (25 pessoas)",
+  "Salão de Festas – Ano Novo (50 pessoas)"
 ];
 
 
 /************************************************************
- 1. MENU PRINCIPAL
-************************************************************/
+ PROPRIEDADES
+ ************************************************************/
+
+const PROPRIEDADES = PropertiesService.getScriptProperties();
+
+
+/************************************************************
+ MENU
+ ************************************************************/
 
 function onOpen() {
 
   SpreadsheetApp.getUi()
-
     .createMenu("SORTEIO DOS SALÕES")
-
-    .addItem(
-      "1 – Criar formulário",
-      "criarFormulario"
-    )
-
-    .addItem(
-      "2 – Atualizar listas",
-      "atualizarListas"
-    )
-
+    .addItem("Criar / Corrigir abas", "criarAbas")
+    .addItem("Atualizar listas", "atualizarListas")
     .addSeparator()
-
-    .addItem(
-      "Sortear todos os ambientes",
-      "sortearTodos"
-    )
-
-    .addItem(
-      "Sortear Gourmet – Natal",
-      "sortearGourmetNatal"
-    )
-
-    .addItem(
-      "Sortear Festas – Natal",
-      "sortearFestasNatal"
-    )
-
-    .addItem(
-      "Sortear Gourmet – Ano Novo",
-      "sortearGourmetAnoNovo"
-    )
-
-    .addItem(
-      "Sortear Festas – Ano Novo",
-      "sortearFestasAnoNovo"
-    )
-
+    .addItem("Sortear Gourmet – Natal", "sortearGourmetNatal")
+    .addItem("Sortear Festas – Natal", "sortearFestasNatal")
+    .addItem("Sortear Gourmet – Ano Novo", "sortearGourmetAnoNovo")
+    .addItem("Sortear Festas – Ano Novo", "sortearFestasAnoNovo")
     .addSeparator()
-
-    .addItem(
-      "Registrar desistência e novo sorteio",
-      "registrarDesistencia"
-    )
-
+    .addItem("Registrar desistência – Gourmet Natal", "registrarDesistenciaGourmetNatal")
+    .addItem("Registrar desistência – Festas Natal", "registrarDesistenciaFestasNatal")
+    .addItem("Registrar desistência – Gourmet Ano Novo", "registrarDesistenciaGourmetAnoNovo")
+    .addItem("Registrar desistência – Festas Ano Novo", "registrarDesistenciaFestasAnoNovo")
+    .addSeparator()
+    .addItem("Atualizar resultados", "atualizarResultados")
     .addToUi();
-
 }
 
 
 /************************************************************
- 2. CRIAR AS ABAS DO SISTEMA
-************************************************************/
+ NORMALIZAÇÃO
+ ************************************************************/
+
+/*
+ * Normalização simples:
+ * usada para nomes, apartamentos etc.
+ */
+function normalizar_(valor) {
+
+  return String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+
+/*
+ * Normalização extremamente robusta para comparar
+ * respostas do formulário com os nomes dos ambientes.
+ *
+ * Remove:
+ * - acentos
+ * - maiúsculas/minúsculas
+ * - espaços
+ * - pontuação
+ * - travessões diferentes
+ * - caracteres especiais
+ */
+function normalizarComparacao_(valor) {
+
+  return String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+
+/************************************************************
+ CRIAÇÃO / CORREÇÃO DAS ABAS
+ ************************************************************/
 
 function criarAbas() {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Criar as quatro abas de inscrições.
-
-  const abasInscricoes = [
-    "Gourmet – Natal",
-    "Festas – Natal",
-    "Gourmet – Ano Novo",
-    "Festas – Ano Novo"
+  /*
+   * Abas dos quatro ambientes
+   */
+  const cabecalhoAmbiente = [
+    "Nome completo",
+    "Apartamento",
+    "Data da inscrição"
   ];
 
-  abasInscricoes.forEach(nome => {
+  for (let i = 0; i < 4; i++) {
 
-    let aba = ss.getSheetByName(nome);
+    let aba = ss.getSheetByName(CONFIG.ABAS[i]);
 
     if (!aba) {
-      aba = ss.insertSheet(nome);
+      aba = ss.insertSheet(CONFIG.ABAS[i]);
     }
 
+    /*
+     * Se estiver completamente vazia,
+     * cria o cabeçalho.
+     */
     if (aba.getLastRow() === 0) {
 
-      aba.appendRow([
-        "Nome completo",
-        "Apartamento",
-        "Data da inscrição"
-      ]);
+      aba.getRange(1, 1, 1, 3)
+        .setValues([cabecalhoAmbiente]);
 
+      aba.setFrozenRows(1);
+
+    } else {
+
+      /*
+       * Garante que o cabeçalho esteja correto.
+       */
+      aba.getRange(1, 1, 1, 3)
+        .setValues([cabecalhoAmbiente]);
+
+      aba.setFrozenRows(1);
     }
+  }
 
-  });
 
+  /**********************************************************
+   ABA RESULTADOS
+   **********************************************************/
 
-  // Criar a aba de resultados com cabeçalho correto.
-
-  let resultados = ss.getSheetByName(
-    "Resultados dos Sorteios"
-  );
+  let resultados = ss.getSheetByName("Resultados dos Sorteios");
 
   if (!resultados) {
-    resultados = ss.insertSheet(
-      "Resultados dos Sorteios"
-    );
+    resultados = ss.insertSheet("Resultados dos Sorteios");
   }
 
-  if (resultados.getLastRow() === 0) {
+  const cabecalhoResultados = [
+    "Ambiente",
+    "Ganhador",
+    "Apartamento",
+    "Data do sorteio",
+    "Status"
+  ];
 
-    resultados.appendRow([
-      "Ambiente",
-      "Nome do ganhador",
-      "Apartamento",
-      "Data do sorteio",
-      "Situação"
-    ]);
+  /*
+   * Corrige somente a primeira linha.
+   * Não apaga resultados existentes.
+   */
+  resultados.getRange(
+    1,
+    1,
+    1,
+    cabecalhoResultados.length
+  ).setValues([cabecalhoResultados]);
 
-  } else {
-
-    const cabecalho = resultados
-      .getRange(1, 1, 1, 5)
-      .getDisplayValues()[0];
-
-    if (cabecalho[0] === "Nome completo") {
-
-      resultados.getRange(1, 1, 1, 5).setValues([[
-        "Ambiente",
-        "Nome do ganhador",
-        "Apartamento",
-        "Data do sorteio",
-        "Situação"
-      ]]);
-
-    }
-
-  }
+  resultados.setFrozenRows(1);
 
 
-  // Criar a aba de histórico com cabeçalho correto.
+  /**********************************************************
+   ABA HISTÓRICO
+   **********************************************************/
 
-  let historico = ss.getSheetByName(
-    "Histórico dos Sorteios"
-  );
+  let historico = ss.getSheetByName("Histórico dos Sorteios");
 
   if (!historico) {
-    historico = ss.insertSheet(
-      "Histórico dos Sorteios"
-    );
+    historico = ss.insertSheet("Histórico dos Sorteios");
   }
 
-  if (historico.getLastRow() === 0) {
+  const cabecalhoHistorico = [
+    "Data/Hora",
+    "Ambiente",
+    "Nome",
+    "Apartamento",
+    "Status"
+  ];
 
-    historico.appendRow([
-      "Data e hora",
-      "Ambiente",
-      "Tipo de registro",
-      "Nome completo",
-      "Apartamento",
-      "Situação",
-      "Observação"
-    ]);
+  /*
+   * Corrige somente a primeira linha.
+   * O histórico existente é preservado.
+   */
+  historico.getRange(
+    1,
+    1,
+    1,
+    cabecalhoHistorico.length
+  ).setValues([cabecalhoHistorico]);
 
-  } else {
-
-    const cabecalho = historico
-      .getRange(1, 1, 1, 7)
-      .getDisplayValues()[0];
-
-    if (cabecalho[0] === "Nome completo") {
-
-      historico.getRange(1, 1, 1, 7).setValues([[
-        "Data e hora",
-        "Ambiente",
-        "Tipo de registro",
-        "Nome completo",
-        "Apartamento",
-        "Situação",
-        "Observação"
-      ]]);
-
-    }
-
-  }
-
-}
-
-
-/************************************************************
- 3. CRIAR FORMULÁRIO
-************************************************************/
-
-function criarFormulario() {
-
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  criarAbas();
-
-  let form = null;
-
-  const idExistente =
-    PROPRIEDADES.getProperty("ID_FORMULARIO");
-
-
-  if (idExistente) {
-
-    try {
-      form = FormApp.openById(idExistente);
-    } catch (erro) {
-      form = null;
-    }
-
-  }
-
-
-  if (!form) {
-
-    form = FormApp.create(
-      CONFIG.NOME_FORMULARIO
-    );
-
-    form.setDescription(
-
-      "INSCRIÇÃO PARA OS SORTEIOS DE NATAL E ANO NOVO.\n\n" +
-
-      "Você poderá participar de um, dois, três ou dos quatro sorteios.\n\n" +
-
-      "ATENÇÃO: Cada apartamento poderá ter apenas uma inscrição válida. " +
-
-      "Caso preencha novamente, será considerada somente a última resposta enviada, " +
-
-      "que substituirá integralmente a anterior."
-
-    );
-
-
-    form.addTextItem()
-      .setTitle("Nome completo")
-      .setRequired(true);
-
-
-    form.addTextItem()
-      .setTitle("Apartamento")
-      .setRequired(true);
-
-
-    form.addCheckboxItem()
-
-      .setTitle(
-        "Em quais sorteios deseja participar?"
-      )
-
-      .setHelpText(
-        "Você pode participar de um, dois, três ou dos quatro sorteios."
-      )
-
-      .setChoiceValues(CONFIG.AMBIENTES)
-
-      .setRequired(true);
-
-
-    form.setConfirmationMessage(
-      "Sua inscrição foi recebida com sucesso!"
-    );
-
-
-    form.setDestination(
-      FormApp.DestinationType.SPREADSHEET,
-      ss.getId()
-    );
-
-
-    PROPRIEDADES.setProperty(
-      "ID_FORMULARIO",
-      form.getId()
-    );
-
-  }
-
-
-  // Criar gatilho somente se ainda não existir.
-
-  const gatilhos = ScriptApp.getProjectTriggers();
-
-  const existeGatilho = gatilhos.some(
-    t =>
-      t.getHandlerFunction() === "aoEnviarFormulario"
-  );
-
-
-  if (!existeGatilho) {
-
-    ScriptApp.newTrigger("aoEnviarFormulario")
-      .forSpreadsheet(ss)
-      .onFormSubmit()
-      .create();
-
-  }
+  historico.setFrozenRows(1);
 
 
   SpreadsheetApp.getUi().alert(
-
-    "FORMULÁRIO PRONTO!\n\n" +
-
-    "LINK PARA OS MORADORES:\n\n" +
-
-    form.getPublishedUrl() +
-
-    "\n\nLINK PARA EDITAR:\n\n" +
-
-    form.getEditUrl()
-
+    "Abas criadas/corrigidas com sucesso."
   );
-
 }
 
 
 /************************************************************
- 4. RECEBER RESPOSTAS DO FORMULÁRIO
-************************************************************/
-
-function aoEnviarFormulario(e) {
-
-  if (!e || !e.range) {
-    throw new Error(
-      "Esta função deve ser executada pelo envio do formulário."
-    );
-  }
-
-  const aba = e.range.getSheet();
-
-  const linha = e.range.getRow();
-
-  const ultimaColuna = aba.getLastColumn();
-
-
-  // Converter respostas textuais para maiúsculas.
-
-  if (ultimaColuna >= 2) {
-
-    const intervalo = aba.getRange(
-      linha,
-      2,
-      1,
-      ultimaColuna - 1
-    );
-
-    const valores = intervalo.getValues();
-
-    const valoresMaiusculos = valores.map(linhaAtual =>
-
-      linhaAtual.map(valor =>
-
-        typeof valor === "string"
-          ? valor.toLocaleUpperCase("pt-BR")
-          : valor
-
-      )
-
-    );
-
-    intervalo.setValues(valoresMaiusculos);
-
-  }
-
-
-  // Atualizar as quatro listas automaticamente.
-
-  atualizarListas_(false);
-
-}
-
-
-/************************************************************
- 5. NORMALIZAR TEXTO
-************************************************************/
-
-function normalizar_(valor) {
-
-  return String(valor || "")
-
-    .normalize("NFD")
-
-    .replace(/[\u0300-\u036f]/g, "")
-
-    .toLowerCase()
-
-    .trim();
-
-}
-
-
-/************************************************************
- 5.1. NORMALIZAR TEXTO PARA COMPARAÇÃO
- IGNORA ACENTOS, MAIÚSCULAS, ESPAÇOS E PONTUAÇÃO
-************************************************************/
-
-function normalizarComparacao_(valor) {
-
-  return normalizar_(valor)
-
-    .replace(/[^a-z0-9]/g, "");
-
-}
-
-
-/************************************************************
- 6. LOCALIZAR A ABA OFICIAL DE RESPOSTAS
-************************************************************/
+ LOCALIZA ABA DE RESPOSTAS
+ ************************************************************/
 
 function localizarAbaRespostas_() {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const aba = ss.getSheetByName(
-    CONFIG.ABA_RESPOSTAS
-  );
+  let aba = ss.getSheetByName(CONFIG.ABA_RESPOSTAS);
 
-
-  if (!aba || aba.getLastRow() < 1) {
-    return null;
+  if (aba) {
+    return aba;
   }
 
+  /*
+   * Caso o nome tenha sido alterado,
+   * procura pela aba que possui os cabeçalhos esperados.
+   */
 
-  const cabecalhos = aba.getRange(
-    1,
-    1,
-    1,
-    aba.getLastColumn()
-  ).getDisplayValues()[0].map(normalizar_);
+  const abas = ss.getSheets();
 
+  for (let i = 0; i < abas.length; i++) {
 
-  const nome = cabecalhos.some(
-    v => v.includes("nome completo")
-  );
+    const sheet = abas[i];
 
-  const apartamento = cabecalhos.some(
-    v => v.includes("apartamento")
-  );
-
-  const escolhas = cabecalhos.some(
-    v => v.includes("em quais sorteios")
-  );
-
-
-  return nome && apartamento && escolhas
-    ? aba
-    : null;
-
-}
-
-
-/************************************************************
- 7. ATUALIZAR LISTAS
-************************************************************/
-
-function atualizarListas() {
-
-  const resultado = atualizarListas_(true);
-
-  if (resultado) {
-
-    SpreadsheetApp.getUi().alert(
-
-      "As quatro listas foram atualizadas corretamente!\n\n" +
-
-      "Foi considerada somente a última resposta de cada apartamento."
-
-    );
-
-  }
-
-}
-
-
-/************************************************************
- 8. PROCESSAR AS RESPOSTAS
-************************************************************/
-
-function atualizarListas_(mostrarErro) {
-
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  criarAbas();
-
-  const origem = localizarAbaRespostas_();
-
-
-  if (!origem) {
-
-    if (mostrarErro) {
-
-      SpreadsheetApp.getUi().alert(
-
-        "Não encontrei a aba oficial de respostas.\n\n" +
-
-        "Verifique se existe a aba:\n" +
-
-        CONFIG.ABA_RESPOSTAS
-
-      );
-
-    }
-
-    return false;
-
-  }
-
-
-  const dados = origem.getDataRange().getValues();
-
-  const exibidos = origem.getDataRange().getDisplayValues();
-
-
-  if (dados.length < 2) {
-    return false;
-  }
-
-
-  const cabecalhos = exibidos[0].map(normalizar_);
-
-
-  const colData = cabecalhos.findIndex(
-
-    v =>
-      v.includes("carimbo") ||
-      v.includes("timestamp")
-
-  );
-
-
-  const colNome = cabecalhos.findIndex(
-
-    v => v.includes("nome completo")
-
-  );
-
-
-  const colApartamento = cabecalhos.findIndex(
-
-    v => v.includes("apartamento")
-
-  );
-
-
-  const colEscolhas = cabecalhos.findIndex(
-
-    v => v.includes("em quais sorteios")
-
-  );
-
-
-  if (
-    colData < 0 ||
-    colNome < 0 ||
-    colApartamento < 0 ||
-    colEscolhas < 0
-  ) {
-
-    if (mostrarErro) {
-
-      SpreadsheetApp.getUi().alert(
-
-        "Não foi possível identificar todas as colunas do formulário."
-
-      );
-
-    }
-
-    return false;
-
-  }
-
-
-  /********************************************************
-   GUARDAR A ÚLTIMA RESPOSTA DE CADA APARTAMENTO
-  ********************************************************/
-
-  const respostasMaisRecentes = new Map();
-
-
-  for (let i = 1; i < dados.length; i++) {
-
-    const nome = String(
-      exibidos[i][colNome] || ""
-    ).trim();
-
-
-    const apartamento = String(
-      exibidos[i][colApartamento] || ""
-    ).trim();
-
-
-    const escolhas = String(
-      exibidos[i][colEscolhas] || ""
-    ).trim();
-
-
-    const data = dados[i][colData];
-
-
-    if (
-      !nome ||
-      !apartamento ||
-      !escolhas ||
-      !(data instanceof Date) ||
-      isNaN(data.getTime())
-    ) {
+    if (CONFIG.ABAS.indexOf(sheet.getName()) !== -1) {
       continue;
     }
 
-
-    const chave = normalizar_(apartamento);
-
-    const anterior = respostasMaisRecentes.get(chave);
-
-
-    // A resposta mais recente substitui integralmente a anterior.
-
-    if (
-      !anterior ||
-      data.getTime() >= anterior.data.getTime()
-    ) {
-
-      respostasMaisRecentes.set(chave, {
-
-        nome: nome,
-
-        apartamento: apartamento,
-
-        escolhas: escolhas,
-
-        data: data
-
-      });
-
+    if (sheet.getLastColumn() === 0) {
+      continue;
     }
 
+    const cabecalhos = sheet
+      .getRange(1, 1, 1, sheet.getLastColumn())
+      .getValues()[0]
+      .map(function(valor) {
+        return normalizar_(valor);
+      });
+
+    const temNome = cabecalhos.some(function(c) {
+      return c.indexOf("nome completo") !== -1;
+    });
+
+    const temApartamento = cabecalhos.some(function(c) {
+      return c.indexOf("apartamento") !== -1;
+    });
+
+    const temSorteios = cabecalhos.some(function(c) {
+      return c.indexOf("sorteios") !== -1;
+    });
+
+    if (temNome && temApartamento && temSorteios) {
+      return sheet;
+    }
+  }
+
+  throw new Error(
+    "Não foi encontrada a aba de respostas do formulário."
+  );
+}
+
+
+/************************************************************
+ LOCALIZA COLUNAS
+ ************************************************************/
+
+function localizarColunasRespostas_(aba) {
+
+  const ultimaColuna = aba.getLastColumn();
+
+  if (ultimaColuna === 0) {
+    throw new Error("A aba de respostas está vazia.");
+  }
+
+  const cabecalhos = aba
+    .getRange(1, 1, 1, ultimaColuna)
+    .getValues()[0];
+
+  let colunaTimestamp = -1;
+  let colunaNome = -1;
+  let colunaApartamento = -1;
+  let colunaSorteios = -1;
+
+  cabecalhos.forEach(function(cabecalho, index) {
+
+    const normalizado = normalizar_(cabecalho);
+
+    if (
+      colunaTimestamp === -1 &&
+      (
+        normalizado.indexOf("carimbo") !== -1 ||
+        normalizado.indexOf("timestamp") !== -1 ||
+        normalizado.indexOf("data") !== -1
+      )
+    ) {
+      colunaTimestamp = index;
+    }
+
+    if (
+      colunaNome === -1 &&
+      normalizado.indexOf("nome completo") !== -1
+    ) {
+      colunaNome = index;
+    }
+
+    if (
+      colunaApartamento === -1 &&
+      normalizado.indexOf("apartamento") !== -1
+    ) {
+      colunaApartamento = index;
+    }
+
+    if (
+      colunaSorteios === -1 &&
+      normalizado.indexOf("sorteios") !== -1
+    ) {
+      colunaSorteios = index;
+    }
+  });
+
+
+  if (colunaTimestamp === -1) {
+    colunaTimestamp = 0;
+  }
+
+  if (colunaNome === -1) {
+    throw new Error(
+      "Não encontrei a coluna 'Nome completo'."
+    );
+  }
+
+  if (colunaApartamento === -1) {
+    throw new Error(
+      "Não encontrei a coluna 'Apartamento'."
+    );
+  }
+
+  if (colunaSorteios === -1) {
+    throw new Error(
+      "Não encontrei a coluna de escolha dos sorteios."
+    );
   }
 
 
-  /********************************************************
-   PRAZO DE INSCRIÇÃO: ATÉ 10 DE DEZEMBRO
-  ********************************************************/
+  return {
+    timestamp: colunaTimestamp,
+    nome: colunaNome,
+    apartamento: colunaApartamento,
+    sorteios: colunaSorteios
+  };
+}
 
-  const anoAtual = new Date().getFullYear();
 
-  const limite = new Date(
+/************************************************************
+ FORMATA DATA
+ ************************************************************/
+
+function obterDataResposta_(valor) {
+
+  if (valor instanceof Date && !isNaN(valor.getTime())) {
+    return valor;
+  }
+
+  const data = new Date(valor);
+
+  if (!isNaN(data.getTime())) {
+    return data;
+  }
+
+  return new Date();
+}
+
+
+/************************************************************
+ ATUALIZAR LISTAS
+ ************************************************************/
+
+function atualizarListas() {
+
+  atualizarListas_(true);
+}
+
+
+function atualizarListas_(mostrarMensagem) {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  criarAbasSemMensagem_();
+
+  const abaRespostas = localizarAbaRespostas_();
+
+  const colunas = localizarColunasRespostas_(abaRespostas);
+
+  const ultimaLinha = abaRespostas.getLastRow();
+  const ultimaColuna = abaRespostas.getLastColumn();
+
+  /*
+   * Limpa as quatro abas operacionais.
+   */
+  for (let i = 0; i < 4; i++) {
+
+    const aba = ss.getSheetByName(CONFIG.ABAS[i]);
+
+    if (aba.getLastRow() > 1) {
+
+      aba.getRange(
+        2,
+        1,
+        aba.getLastRow() - 1,
+        3
+      ).clearContent();
+    }
+  }
+
+
+  if (ultimaLinha < 2) {
+
+    if (mostrarMensagem) {
+      SpreadsheetApp.getUi().alert(
+        "A aba de respostas ainda não possui inscrições."
+      );
+    }
+
+    return;
+  }
+
+
+  const dados = abaRespostas
+    .getRange(
+      2,
+      1,
+      ultimaLinha - 1,
+      ultimaColuna
+    )
+    .getValues();
+
+
+  /**********************************************************
+   * ÚLTIMA RESPOSTA DE CADA APARTAMENTO
+   **********************************************************/
+
+  const ultimaRespostaPorApartamento = {};
+
+
+  dados.forEach(function(linha) {
+
+    const apartamento = String(
+      linha[colunas.apartamento] || ""
+    ).trim();
+
+    if (!apartamento) {
+      return;
+    }
+
+    const chaveApartamento =
+      normalizarComparacao_(apartamento);
+
+    if (!chaveApartamento) {
+      return;
+    }
+
+    const timestamp =
+      obterDataResposta_(linha[colunas.timestamp]);
+
+    const resposta = {
+      timestamp: timestamp,
+      nome: String(
+        linha[colunas.nome] || ""
+      ).trim(),
+      apartamento: apartamento,
+      escolhas: String(
+        linha[colunas.sorteios] || ""
+      ).trim()
+    };
+
+
+    /*
+     * A última resposta substitui a anterior.
+     */
+    if (
+      !ultimaRespostaPorApartamento[chaveApartamento] ||
+      timestamp.getTime() >=
+        ultimaRespostaPorApartamento[
+          chaveApartamento
+        ].timestamp.getTime()
+    ) {
+
+      ultimaRespostaPorApartamento[
+        chaveApartamento
+      ] = resposta;
+    }
+  });
+
+
+  /**********************************************************
+   * DATA ATUAL / PRAZO
+   **********************************************************/
+
+  const hoje = new Date();
+
+  const anoAtual = hoje.getFullYear();
+
+  const prazo = new Date(
     anoAtual,
-    11,
-    10,
+    CONFIG.PRAZO_INSCRICAO.MES - 1,
+    CONFIG.PRAZO_INSCRICAO.DIA,
     23,
     59,
     59
   );
 
+
+  /**********************************************************
+   * LISTAS DOS AMBIENTES
+   **********************************************************/
 
   const listas = [
     [],
@@ -725,766 +586,1302 @@ function atualizarListas_(mostrarErro) {
   ];
 
 
-  /********************************************************
-   DISTRIBUIR SOMENTE A ÚLTIMA RESPOSTA
-  ********************************************************/
+  Object.keys(
+    ultimaRespostaPorApartamento
+  ).forEach(function(chave) {
 
-  respostasMaisRecentes.forEach(resposta => {
+    const resposta =
+      ultimaRespostaPorApartamento[chave];
 
+    /*
+     * Ignora respostas de anos anteriores.
+     */
     if (
-      resposta.data.getFullYear() !== anoAtual ||
-      resposta.data > limite
+      resposta.timestamp.getFullYear() !== anoAtual
     ) {
       return;
     }
 
+    /*
+     * Ignora inscrições depois do prazo.
+     */
+    if (
+      resposta.timestamp.getTime() > prazo.getTime()
+    ) {
+      return;
+    }
 
+    if (!resposta.nome || !resposta.apartamento) {
+      return;
+    }
+
+
+    /*
+     * NORMALIZAÇÃO ROBUSTA
+     *
+     * Isso resolve o problema de:
+     *
+     * SALÃO GOURMET – NATAL
+     *
+     * versus
+     *
+     * Salão Gourmet - Natal
+     *
+     * ou diferenças de acentos, espaços etc.
+     */
     const escolhasNormalizadas =
-      normalizarComparacao_(resposta.escolhas);
+      normalizarComparacao_(
+        resposta.escolhas
+      );
 
 
-    CONFIG.AMBIENTES.forEach((ambiente, indice) => {
+    CONFIG.AMBIENTES.forEach(function(
+      ambiente,
+      indice
+    ) {
 
       const ambienteNormalizado =
         normalizarComparacao_(ambiente);
 
 
-      // Compara ignorando maiúsculas, acentos,
-      // espaços e sinais de pontuação.
-
+      /*
+       * Verifica se o ambiente escolhido
+       * está realmente na resposta.
+       */
       if (
-        escolhasNormalizadas.includes(ambienteNormalizado)
+        escolhasNormalizadas.indexOf(
+          ambienteNormalizado
+        ) !== -1
       ) {
 
         listas[indice].push([
-
           resposta.nome,
-
           resposta.apartamento,
-
-          resposta.data
-
+          resposta.timestamp
         ]);
-
       }
-
     });
-
   });
 
 
-  /********************************************************
-   ESCREVER AS QUATRO LISTAS
-  ********************************************************/
+  /**********************************************************
+   * ESCREVE AS LISTAS
+   **********************************************************/
 
-  const nomesAbas = [
-    "Gourmet – Natal",
-    "Festas – Natal",
-    "Gourmet – Ano Novo",
-    "Festas – Ano Novo"
-  ];
+  for (let i = 0; i < 4; i++) {
 
+    const aba = ss.getSheetByName(
+      CONFIG.ABAS[i]
+    );
 
-  nomesAbas.forEach((nomeAba, indice) => {
-
-    const aba = ss.getSheetByName(nomeAba);
-
-    aba.clearContents();
-
-
-    aba.getRange(1, 1, 1, 3).setValues([[
-
-      "Nome completo",
-      "Apartamento",
-      "Data da inscrição"
-
-    ]]);
-
-
-    if (listas[indice].length > 0) {
+    if (listas[i].length > 0) {
 
       aba.getRange(
         2,
         1,
-        listas[indice].length,
+        listas[i].length,
         3
-      ).setValues(listas[indice]);
+      ).setValues(listas[i]);
 
+      aba.getRange(
+        2,
+        3,
+        listas[i].length,
+        1
+      ).setNumberFormat(
+        "dd/MM/yyyy HH:mm:ss"
+      );
     }
+  }
 
 
-    aba.setFrozenRows(1);
+  if (mostrarMensagem) {
 
-    aba.autoResizeColumns(1, 3);
-
-  });
-
-
-  return true;
-
+    SpreadsheetApp.getUi().alert(
+      "Listas atualizadas com sucesso."
+    );
+  }
 }
 
 
 /************************************************************
- 9. SORTEIOS INDIVIDUAIS
-************************************************************/
+ CRIA ABAS SEM MOSTRAR ALERTA
+ ************************************************************/
+
+function criarAbasSemMensagem_() {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const cabecalhoAmbiente = [
+    "Nome completo",
+    "Apartamento",
+    "Data da inscrição"
+  ];
+
+  for (let i = 0; i < 4; i++) {
+
+    let aba = ss.getSheetByName(CONFIG.ABAS[i]);
+
+    if (!aba) {
+      aba = ss.insertSheet(CONFIG.ABAS[i]);
+    }
+
+    aba.getRange(
+      1,
+      1,
+      1,
+      3
+    ).setValues([
+      cabecalhoAmbiente
+    ]);
+
+    aba.setFrozenRows(1);
+  }
+
+
+  let resultados =
+    ss.getSheetByName(
+      "Resultados dos Sorteios"
+    );
+
+  if (!resultados) {
+    resultados =
+      ss.insertSheet(
+        "Resultados dos Sorteios"
+      );
+  }
+
+  resultados.getRange(
+    1,
+    1,
+    1,
+    5
+  ).setValues([[
+    "Ambiente",
+    "Ganhador",
+    "Apartamento",
+    "Data do sorteio",
+    "Status"
+  ]]);
+
+  resultados.setFrozenRows(1);
+
+
+  let historico =
+    ss.getSheetByName(
+      "Histórico dos Sorteios"
+    );
+
+  if (!historico) {
+    historico =
+      ss.insertSheet(
+        "Histórico dos Sorteios"
+      );
+  }
+
+  historico.getRange(
+    1,
+    1,
+    1,
+    5
+  ).setValues([[
+    "Data/Hora",
+    "Ambiente",
+    "Nome",
+    "Apartamento",
+    "Status"
+  ]]);
+
+  historico.setFrozenRows(1);
+}
+
+
+/************************************************************
+ EVENTO DO FORMULÁRIO
+ ************************************************************/
+
+function aoEnviarFormulario(e) {
+
+  if (!e || !e.range) {
+    return;
+  }
+
+  const aba = e.range.getSheet();
+
+  /*
+   * Só processa a aba correta.
+   */
+  if (
+    aba.getName() !== CONFIG.ABA_RESPOSTAS
+  ) {
+    return;
+  }
+
+
+  /*
+   * Converte Nome, Apartamento e demais
+   * respostas para maiúsculas.
+   *
+   * Mantém o timestamp intacto.
+   */
+  const linha = e.range.getRow();
+
+  const ultimaColuna = aba.getLastColumn();
+
+  if (ultimaColuna >= 2) {
+
+    const intervalo =
+      aba.getRange(
+        linha,
+        2,
+        1,
+        ultimaColuna - 1
+      );
+
+    const valores =
+      intervalo.getValues();
+
+    valores[0] = valores[0].map(
+      function(valor) {
+
+        if (
+          valor instanceof Date
+        ) {
+          return valor;
+        }
+
+        return String(valor || "")
+          .toUpperCase()
+          .trim();
+      }
+    );
+
+    intervalo.setValues(valores);
+  }
+
+
+  /*
+   * Atualiza imediatamente as listas.
+   */
+  atualizarListas_(false);
+}
+
+
+/************************************************************
+ FUNÇÃO DE TESTE MANUAL
+ ************************************************************/
+
+function testarAtualizacao() {
+
+  atualizarListas_(true);
+}
+
+
+/************************************************************
+ SORTEIOS
+ ************************************************************/
 
 function sortearGourmetNatal() {
 
-  const resultado = sortearAmbiente_(
-    "Gourmet – Natal"
+  return sortearAmbiente_(
+    0
   );
-
-  SpreadsheetApp.getUi().alert(resultado);
-
 }
 
 
 function sortearFestasNatal() {
 
-  const resultado = sortearAmbiente_(
-    "Festas – Natal"
+  return sortearAmbiente_(
+    1
   );
-
-  SpreadsheetApp.getUi().alert(resultado);
-
 }
 
 
 function sortearGourmetAnoNovo() {
 
-  const resultado = sortearAmbiente_(
-    "Gourmet – Ano Novo"
+  return sortearAmbiente_(
+    2
   );
-
-  SpreadsheetApp.getUi().alert(resultado);
-
 }
 
 
 function sortearFestasAnoNovo() {
 
-  const resultado = sortearAmbiente_(
-    "Festas – Ano Novo"
+  return sortearAmbiente_(
+    3
   );
-
-  SpreadsheetApp.getUi().alert(resultado);
-
 }
 
 
 /************************************************************
- 10. SORTEAR TODOS OS AMBIENTES
-************************************************************/
+ SORTEIO COM LOCK
+ ************************************************************/
 
-function sortearTodos() {
+function sortearAmbiente_(indice) {
 
-  if (!atualizarListas_(false)) {
+  const lock =
+    LockService.getScriptLock();
 
-    SpreadsheetApp.getUi().alert(
-      "Não foi possível atualizar as listas."
-    );
-
-    return;
-
-  }
-
-
-  const ambientes = [
-    "Gourmet – Natal",
-    "Festas – Natal",
-    "Gourmet – Ano Novo",
-    "Festas – Ano Novo"
-  ];
-
-
-  const mensagens = [];
-
-
-  ambientes.forEach(ambiente => {
-
-    mensagens.push(
-      sortearAmbiente_(ambiente)
-    );
-
-  });
-
-
-  atualizarResultados_();
-
-
-  SpreadsheetApp.getUi().alert(
-
-    "RESULTADOS DOS SORTEIOS\n\n" +
-
-    mensagens.join("\n\n")
-
-  );
-
-}
-
-
-/************************************************************
- 11. EXECUTAR SORTEIO DE UM AMBIENTE
- COM PROTEÇÃO CONTRA EXECUÇÕES SIMULTÂNEAS
-************************************************************/
-
-function sortearAmbiente_(ambiente) {
-
-  const bloqueio = LockService.getScriptLock();
-
-
-  if (!bloqueio.tryLock(10000)) {
-
-    return "Não foi possível realizar o sorteio de " +
-      ambiente +
-      ". Outra operação está em andamento. Tente novamente.";
-
-  }
-
+  lock.waitLock(30000);
 
   try {
 
-    return sortearAmbienteInterno_(ambiente);
-
-  } catch (erro) {
-
-    console.error(erro);
-
-    return "Erro ao realizar o sorteio de " +
-      ambiente + ": " + erro.message;
+    return sortearAmbienteInterno_(
+      indice
+    );
 
   } finally {
 
-    if (bloqueio.hasLock()) {
-      bloqueio.releaseLock();
-    }
-
+    lock.releaseLock();
   }
-
 }
 
 
 /************************************************************
- 11.1. EXECUÇÃO INTERNA DO SORTEIO
- NÃO ADQUIRE OUTRO BLOQUEIO
-************************************************************/
+ SORTEIO INTERNO
+ ************************************************************/
 
-function sortearAmbienteInterno_(ambiente) {
+function sortearAmbienteInterno_(indice) {
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  criarAbas();
-
-
-  if (!atualizarListas_(false)) {
-
-    return "Não foi possível atualizar as listas.";
-
+  if (
+    indice < 0 ||
+    indice >= CONFIG.AMBIENTES.length
+  ) {
+    throw new Error(
+      "Ambiente inválido."
+    );
   }
 
 
-  const abaLista = ss.getSheetByName(ambiente);
-
-  const historico = ss.getSheetByName(
-    "Histórico dos Sorteios"
-  );
-
-
-  const dadosHistorico =
-    historico.getDataRange().getValues();
+  /*
+   * Sempre atualiza as listas antes do sorteio.
+   */
+  atualizarListas_(false);
 
 
-  // Impedir sorteio duplicado se houver ganhador ativo.
+  const ss =
+    SpreadsheetApp.getActiveSpreadsheet();
 
-  const ganhadorAtivo = dadosHistorico
-    .slice(1)
-    .some(linha =>
 
-      linha[1] === ambiente &&
-      linha[5] === "Ganhador"
+  const ambiente =
+    CONFIG.AMBIENTES[indice];
 
+  const aba =
+    ss.getSheetByName(
+      CONFIG.ABAS[indice]
     );
 
 
-  if (ganhadorAtivo) {
-
-    return ambiente +
-      ": já possui um ganhador ativo.";
-
+  if (!aba) {
+    throw new Error(
+      "A aba do ambiente não existe."
+    );
   }
 
 
-  const dadosLista = abaLista.getDataRange().getValues();
+  /**********************************************************
+   * VERIFICA SE JÁ EXISTE GANHADOR ATIVO
+   **********************************************************/
+
+  const historico =
+    ss.getSheetByName(
+      "Histórico dos Sorteios"
+    );
+
+  const ultimaLinha =
+    historico.getLastRow();
 
 
-  if (dadosLista.length < 2) {
+  if (ultimaLinha > 1) {
 
-    return ambiente +
-      ": não há inscritos.";
-
-  }
-
-
-  // Recuperar apartamentos que desistiram
-  // somente deste ambiente.
-
-  const desistentes = new Set();
+    const dadosHistorico =
+      historico.getRange(
+        2,
+        1,
+        ultimaLinha - 1,
+        5
+      ).getValues();
 
 
-  dadosHistorico.slice(1).forEach(linha => {
-
-    if (
-      linha[1] === ambiente &&
-      linha[5] === "Desistiu"
+    /*
+     * Procura o último registro desse ambiente.
+     */
+    for (
+      let i = dadosHistorico.length - 1;
+      i >= 0;
+      i--
     ) {
 
-      desistentes.add(
-        normalizar_(linha[4])
-      );
+      const registro =
+        dadosHistorico[i];
 
+      const ambienteRegistro =
+        normalizarComparacao_(
+          registro[1]
+        );
+
+      const ambienteAtual =
+        normalizarComparacao_(
+          ambiente
+        );
+
+
+      if (
+        ambienteRegistro ===
+        ambienteAtual
+      ) {
+
+        const status =
+          normalizarComparacao_(
+            registro[4]
+          );
+
+        /*
+         * Se já existe ganhador ativo,
+         * não faz outro sorteio.
+         */
+        if (
+          status ===
+          normalizarComparacao_(
+            "Ganhador"
+          )
+        ) {
+
+          throw new Error(
+            "Este ambiente já possui um ganhador ativo."
+          );
+        }
+
+        /*
+         * Se o último registro for desistência,
+         * o novo sorteio pode continuar.
+         */
+        break;
+      }
     }
-
-  });
-
-
-  const candidatos = dadosLista
-    .slice(1)
-    .filter(linha => {
-
-      const nome = String(linha[0] || "").trim();
-
-      const apartamento = String(linha[1] || "").trim();
-
-
-      return (
-        nome &&
-        apartamento &&
-        !desistentes.has(normalizar_(apartamento))
-      );
-
-    });
-
-
-  if (candidatos.length === 0) {
-
-    return ambiente +
-      ": não há candidatos disponíveis.";
-
   }
 
 
-  // Sorteio aleatório.
+  /**********************************************************
+   * LÊ CANDIDATOS
+   **********************************************************/
 
-  const indice = Math.floor(
-    Math.random() * candidatos.length
-  );
+  const ultimaLinhaAba =
+    aba.getLastRow();
 
-  const ganhador = candidatos[indice];
+  if (ultimaLinhaAba < 2) {
 
-
-  // Registrar no histórico.
-
-  historico.appendRow([
-
-    new Date(),
-
-    ambiente,
-
-    "Sorteio",
-
-    ganhador[0],
-
-    ganhador[1],
-
-    "Ganhador",
-
-    ""
-
-  ]);
+    throw new Error(
+      "Não existem inscrições válidas para este ambiente."
+    );
+  }
 
 
-  atualizarResultados_();
+  const candidatos =
+    aba.getRange(
+      2,
+      1,
+      ultimaLinhaAba - 1,
+      3
+    ).getValues();
 
 
-  return (
-
-    ambiente +
-
-    "\nGanhador: " + ganhador[0] +
-
-    "\nApartamento: " + ganhador[1]
-
-  );
-
-}
+  /*
+   * Apartamentos que já desistiram desse ambiente.
+   */
+  const desistentes =
+    obterDesistentesDoAmbiente_(
+      ambiente
+    );
 
 
-/************************************************************
- 12. REGISTRAR DESISTÊNCIA PELA PLANILHA
-************************************************************/
+  const candidatosValidos =
+    candidatos.filter(
+      function(candidato) {
 
-function registrarDesistencia() {
+        const apartamento =
+          normalizarComparacao_(
+            candidato[1]
+          );
 
-  const ui = SpreadsheetApp.getUi();
-
-
-  const ambientes = [
-    "Gourmet – Natal",
-    "Festas – Natal",
-    "Gourmet – Ano Novo",
-    "Festas – Ano Novo"
-  ];
-
-
-  const respostaAmbiente = ui.prompt(
-
-    "REGISTRAR DESISTÊNCIA",
-
-    "Digite exatamente o nome do ambiente:\n\n" +
-    ambientes.join("\n"),
-
-    ui.ButtonSet.OK_CANCEL
-
-  );
+        return (
+          apartamento &&
+          !desistentes.has(
+            apartamento
+          )
+        );
+      }
+    );
 
 
   if (
-    respostaAmbiente.getSelectedButton() !==
-    ui.Button.OK
+    candidatosValidos.length === 0
   ) {
-    return;
+
+    throw new Error(
+      "Não existem candidatos válidos para este sorteio."
+    );
   }
 
 
-  const ambiente = ambientes.find(
+  /**********************************************************
+   * SORTEIO
+   **********************************************************/
 
-    nome =>
-      normalizar_(nome) ===
-      normalizar_(respostaAmbiente.getResponseText())
+  const indiceSorteado =
+    Math.floor(
+      Math.random() *
+      candidatosValidos.length
+    );
 
-  );
+
+  const ganhador =
+    candidatosValidos[
+      indiceSorteado
+    ];
 
 
-  if (!ambiente) {
+  const agora =
+    new Date();
 
-    ui.alert("Nome do ambiente inválido.");
 
-    return;
+  /**********************************************************
+   * REGISTRA NO HISTÓRICO
+   **********************************************************/
 
+  historico.appendRow([
+    agora,
+    ambiente,
+    ganhador[0],
+    ganhador[1],
+    "Ganhador"
+  ]);
+
+
+  /*
+   * Atualiza resultados.
+   */
+  atualizarResultados_();
+
+
+  SpreadsheetApp.getActiveSpreadsheet()
+    .toast(
+      "Ganhador: " +
+      ganhador[0] +
+      " – Apto " +
+      ganhador[1],
+      "SORTEIO",
+      8
+    );
+
+
+  return {
+    ambiente: ambiente,
+    nome: ganhador[0],
+    apartamento: ganhador[1],
+    data: agora
+  };
+}
+
+
+/************************************************************
+ DESISTENTES DE UM AMBIENTE
+ ************************************************************/
+
+function obterDesistentesDoAmbiente_(ambiente) {
+
+  const ss =
+    SpreadsheetApp.getActiveSpreadsheet();
+
+  const historico =
+    ss.getSheetByName(
+      "Histórico dos Sorteios"
+    );
+
+  const desistentes =
+    new Set();
+
+
+  if (
+    !historico ||
+    historico.getLastRow() < 2
+  ) {
+    return desistentes;
   }
 
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  const historico = ss.getSheetByName(
-    "Histórico dos Sorteios"
-  );
-
-
-  const dados = historico.getDataRange().getValues();
-
-  let linhaGanhador = -1;
+  const dados =
+    historico.getRange(
+      2,
+      1,
+      historico.getLastRow() - 1,
+      5
+    ).getValues();
 
 
-  for (let i = dados.length - 1; i >= 1; i--) {
+  const ambienteNormalizado =
+    normalizarComparacao_(
+      ambiente
+    );
 
-    if (
-      dados[i][1] === ambiente &&
-      dados[i][5] === "Ganhador"
-    ) {
 
-      linhaGanhador = i + 1;
+  dados.forEach(
+    function(registro) {
 
-      break;
+      const ambienteRegistro =
+        normalizarComparacao_(
+          registro[1]
+        );
 
+      const status =
+        normalizarComparacao_(
+          registro[4]
+        );
+
+
+      if (
+        ambienteRegistro ===
+        ambienteNormalizado &&
+        status ===
+        normalizarComparacao_(
+          "Desistiu"
+        )
+      ) {
+
+        const apartamento =
+          normalizarComparacao_(
+            registro[3]
+          );
+
+        if (apartamento) {
+          desistentes.add(
+            apartamento
+          );
+        }
+      }
     }
-
-  }
-
-
-  if (linhaGanhador < 0) {
-
-    ui.alert(
-      "Não existe ganhador ativo nesse ambiente."
-    );
-
-    return;
-
-  }
-
-
-  const ganhador = dados[linhaGanhador - 1];
-
-
-  const confirmacao = ui.alert(
-
-    "CONFIRMAR DESISTÊNCIA",
-
-    "Ganhador: " + ganhador[3] +
-
-    "\nApartamento: " + ganhador[4] +
-
-    "\n\nO apartamento será excluído somente deste ambiente." +
-
-    "\n\nDeseja confirmar e realizar novo sorteio?",
-
-    ui.ButtonSet.YES_NO
-
   );
 
 
-  if (confirmacao !== ui.Button.YES) {
-    return;
-  }
+  return desistentes;
+}
 
 
-  const bloqueio = LockService.getScriptLock();
+/************************************************************
+ DESISTÊNCIAS
+ ************************************************************/
+
+function registrarDesistenciaGourmetNatal() {
+
+  return registrarDesistencia(0);
+}
 
 
-  if (!bloqueio.tryLock(10000)) {
+function registrarDesistenciaFestasNatal() {
 
-    ui.alert(
-      "Outra operação está em andamento. Tente novamente."
-    );
+  return registrarDesistencia(1);
+}
 
-    return;
 
-  }
+function registrarDesistenciaGourmetAnoNovo() {
 
+  return registrarDesistencia(2);
+}
+
+
+function registrarDesistenciaFestasAnoNovo() {
+
+  return registrarDesistencia(3);
+}
+
+
+/************************************************************
+ REGISTRAR DESISTÊNCIA
+ ************************************************************/
+
+function registrarDesistencia(indice) {
+
+  const lock =
+    LockService.getScriptLock();
+
+  lock.waitLock(30000);
 
   try {
 
-    // Conferir novamente o ganhador após obter o bloqueio.
+    if (
+      indice < 0 ||
+      indice >= CONFIG.AMBIENTES.length
+    ) {
 
-    const dadosAtualizados =
-      historico.getDataRange().getValues();
+      throw new Error(
+        "Ambiente inválido."
+      );
+    }
 
-    let linhaAtual = -1;
+
+    const ss =
+      SpreadsheetApp.getActiveSpreadsheet();
 
 
-    for (let i = dadosAtualizados.length - 1; i >= 1; i--) {
+    const ambiente =
+      CONFIG.AMBIENTES[indice];
+
+
+    const historico =
+      ss.getSheetByName(
+        "Histórico dos Sorteios"
+      );
+
+
+    if (
+      !historico ||
+      historico.getLastRow() < 2
+    ) {
+
+      throw new Error(
+        "Não existe ganhador registrado."
+      );
+    }
+
+
+    const dados =
+      historico.getRange(
+        2,
+        1,
+        historico.getLastRow() - 1,
+        5
+      ).getValues();
+
+
+    const ambienteNormalizado =
+      normalizarComparacao_(
+        ambiente
+      );
+
+
+    let linhaGanhador = -1;
+
+
+    /*
+     * Procura de trás para frente.
+     * Isso garante que encontramos o estado
+     * mais recente do ambiente.
+     */
+    for (
+      let i = dados.length - 1;
+      i >= 0;
+      i--
+    ) {
+
+      const ambienteRegistro =
+        normalizarComparacao_(
+          dados[i][1]
+        );
+
+      const status =
+        normalizarComparacao_(
+          dados[i][4]
+        );
+
 
       if (
-        dadosAtualizados[i][1] === ambiente &&
-        dadosAtualizados[i][5] === "Ganhador"
+        ambienteRegistro ===
+        ambienteNormalizado
       ) {
 
-        linhaAtual = i + 1;
+        if (
+          status ===
+          normalizarComparacao_(
+            "Ganhador"
+          )
+        ) {
+
+          linhaGanhador =
+            i + 2;
+
+        } else {
+
+          /*
+           * O último registro não é ganhador ativo.
+           */
+          throw new Error(
+            "Este ambiente não possui ganhador ativo."
+          );
+        }
 
         break;
-
       }
-
     }
 
 
-    if (linhaAtual < 0) {
+    if (
+      linhaGanhador === -1
+    ) {
 
-      ui.alert(
-        "O ganhador ativo foi alterado por outra operação. Verifique o histórico."
+      throw new Error(
+        "Não foi encontrado ganhador ativo."
       );
-
-      return;
-
     }
 
 
-    const ganhadorAtual =
-      dadosAtualizados[linhaAtual - 1];
-
-
-    historico.getRange(linhaAtual, 6)
-      .setValue("Desistiu");
-
-
-    historico.getRange(linhaAtual, 7)
+    /*
+     * Marca o ganhador como desistente.
+     */
+    historico
+      .getRange(
+        linhaGanhador,
+        5
+      )
       .setValue(
-
-        "Desistência registrada em " +
-
-        Utilities.formatDate(
-          new Date(),
-          Session.getScriptTimeZone(),
-          "dd/MM/yyyy HH:mm"
-        )
-
+        "Desistiu"
       );
 
 
-    const resultado =
-      sortearAmbienteInterno_(ambiente);
+    /*
+     * Faz novo sorteio usando a função INTERNA,
+     * porque o LockService já está ativo.
+     */
+    const novoGanhador =
+      sortearAmbienteInterno_(
+        indice
+      );
 
 
     atualizarResultados_();
 
 
-    ui.alert(
-
-      "NOVO SORTEIO REALIZADO\n\n" +
-
-      "Desistente: " + ganhadorAtual[3] +
-
-      "\nApartamento: " + ganhadorAtual[4] +
-
-      "\n\n" + resultado
-
+    SpreadsheetApp.getUi().alert(
+      "Desistência registrada.\n\n" +
+      "Novo ganhador:\n" +
+      novoGanhador.nome +
+      "\nApartamento: " +
+      novoGanhador.apartamento
     );
 
-  } catch (erro) {
 
-    console.error(erro);
-
-    ui.alert(
-      "Ocorreu um erro ao registrar a desistência:\n\n" +
-      erro.message
-    );
+    return novoGanhador;
 
   } finally {
 
-    if (bloqueio.hasLock()) {
-      bloqueio.releaseLock();
-    }
-
+    lock.releaseLock();
   }
-
 }
 
 
 /************************************************************
- 13. ATUALIZAR RESULTADOS
-************************************************************/
+ RESULTADOS
+ ************************************************************/
+
+function atualizarResultados() {
+
+  atualizarResultados_();
+
+  SpreadsheetApp.getUi().alert(
+    "Resultados atualizados."
+  );
+}
+
 
 function atualizarResultados_() {
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  criarAbas();
-
-
-  const aba = ss.getSheetByName(
-    "Resultados dos Sorteios"
-  );
-
-  const historico = ss.getSheetByName(
-    "Histórico dos Sorteios"
-  );
+  const ss =
+    SpreadsheetApp.getActiveSpreadsheet();
 
 
-  const dados = historico.getDataRange().getValues();
+  criarAbasSemMensagem_();
 
 
-  aba.clearContents();
-
-
-  aba.appendRow([
-
-    "Ambiente",
-    "Nome do ganhador",
-    "Apartamento",
-    "Data do sorteio",
-    "Situação"
-
-  ]);
-
-
-  const ambientes = [
-    "Gourmet – Natal",
-    "Festas – Natal",
-    "Gourmet – Ano Novo",
-    "Festas – Ano Novo"
-  ];
-
-
-  ambientes.forEach(ambiente => {
-
-    let ganhador = null;
-
-
-    for (let i = dados.length - 1; i >= 1; i--) {
-
-      if (
-        dados[i][1] === ambiente &&
-        dados[i][5] === "Ganhador"
-      ) {
-
-        ganhador = dados[i];
-
-        break;
-
-      }
-
-    }
-
-
-    if (ganhador) {
-
-      aba.appendRow([
-
-        ambiente,
-        ganhador[3],
-        ganhador[4],
-        ganhador[0],
-        "Ganhador"
-
-      ]);
-
-    } else {
-
-      aba.appendRow([
-
-        ambiente,
-        "Aguardando sorteio",
-        "",
-        "",
-        "Pendente"
-
-      ]);
-
-    }
-
-  });
-
-
-  aba.setFrozenRows(1);
-
-  aba.autoResizeColumns(1, 5);
-
-}
-
-
-/************************************************************
- 14. VERIFICAR ACESSO DO ADMINISTRADOR
-************************************************************/
-
-function verificarAcessoPainel_() {
-
-  const email = Session.getActiveUser()
-    .getEmail()
-    .toLowerCase()
-    .trim();
-
-
-  if (
-    !email ||
-    !EMAILS_AUTORIZADOS.includes(email)
-  ) {
-
-    throw new Error(
-      "Acesso não autorizado. Entre com uma conta Google autorizada."
+  const historico =
+    ss.getSheetByName(
+      "Histórico dos Sorteios"
     );
 
+
+  const resultados =
+    ss.getSheetByName(
+      "Resultados dos Sorteios"
+    );
+
+
+  /*
+   * Limpa somente os resultados antigos,
+   * preservando o cabeçalho.
+   */
+  if (
+    resultados.getLastRow() > 1
+  ) {
+
+    resultados
+      .getRange(
+        2,
+        1,
+        resultados.getLastRow() - 1,
+        5
+      )
+      .clearContent();
   }
 
 
-  return email;
+  if (
+    !historico ||
+    historico.getLastRow() < 2
+  ) {
 
+    return;
+  }
+
+
+  const dados =
+    historico.getRange(
+      2,
+      1,
+      historico.getLastRow() - 1,
+      5
+    ).getValues();
+
+
+  const ganhadores = {};
+
+
+  /*
+   * Percorre em ordem cronológica.
+   * O último status de cada ambiente prevalece.
+   */
+  dados.forEach(
+    function(registro) {
+
+      const ambiente =
+        String(
+          registro[1] || ""
+        ).trim();
+
+      if (!ambiente) {
+        return;
+      }
+
+      const chave =
+        normalizarComparacao_(
+          ambiente
+        );
+
+
+      const status =
+        String(
+          registro[4] || ""
+        ).trim();
+
+
+      if (
+        normalizarComparacao_(
+          status
+        ) ===
+        normalizarComparacao_(
+          "Ganhador"
+        )
+      ) {
+
+        ganhadores[chave] = {
+          ambiente: ambiente,
+          nome: registro[2],
+          apartamento: registro[3],
+          data: registro[0],
+          status: "Ganhador"
+        };
+
+      } else if (
+        normalizarComparacao_(
+          status
+        ) ===
+        normalizarComparacao_(
+          "Desistiu"
+        )
+      ) {
+
+        delete ganhadores[chave];
+      }
+    }
+  );
+
+
+  const linhas = [];
+
+
+  CONFIG.AMBIENTES.forEach(
+    function(ambiente) {
+
+      const chave =
+        normalizarComparacao_(
+          ambiente
+        );
+
+      const ganhador =
+        ganhadores[chave];
+
+
+      if (ganhador) {
+
+        linhas.push([
+          ganhador.ambiente,
+          ganhador.nome,
+          ganhador.apartamento,
+          ganhador.data,
+          ganhador.status
+        ]);
+      }
+    }
+  );
+
+
+  if (linhas.length > 0) {
+
+    resultados
+      .getRange(
+        2,
+        1,
+        linhas.length,
+        5
+      )
+      .setValues(linhas);
+
+
+    resultados
+      .getRange(
+        2,
+        4,
+        linhas.length,
+        1
+      )
+      .setNumberFormat(
+        "dd/MM/yyyy HH:mm:ss"
+      );
+  }
 }
 
 
 /************************************************************
- 15. ABRIR O APLICATIVO
-************************************************************/
+ CRIAR FORMULÁRIO
+ ************************************************************/
+
+function criarFormulario() {
+
+  const ss =
+    SpreadsheetApp.getActiveSpreadsheet();
+
+
+  let formId =
+    PROPRIEDADES.getProperty(
+      "FORM_ID"
+    );
+
+
+  let form;
+
+
+  if (formId) {
+
+    try {
+
+      form =
+        FormApp.openById(
+          formId
+        );
+
+    } catch (erro) {
+
+      form = null;
+    }
+  }
+
+
+  /*
+   * Procura formulário pelo nome se o ID
+   * não estiver disponível.
+   */
+  if (!form) {
+
+    const arquivos =
+      DriveApp.getFilesByName(
+        CONFIG.NOME_FORMULARIO
+      );
+
+
+    while (
+      arquivos.hasNext()
+    ) {
+
+      const arquivo =
+        arquivos.next();
+
+
+      if (
+        arquivo.getMimeType() ===
+        MimeType.GOOGLE_FORMS
+      ) {
+
+        form =
+          FormApp.openById(
+            arquivo.getId()
+          );
+
+        break;
+      }
+    }
+  }
+
+
+  /*
+   * Cria o formulário se ainda não existir.
+   */
+  if (!form) {
+
+    form =
+      FormApp.create(
+        CONFIG.NOME_FORMULARIO
+      );
+
+    formId =
+      form.getId();
+
+
+    PROPRIEDADES.setProperty(
+      "FORM_ID",
+      formId
+    );
+  }
+
+
+  /*
+   * Verifica se já existem perguntas.
+   */
+  const itens =
+    form.getItems();
+
+
+  if (itens.length === 0) {
+
+    form.addTextItem()
+      .setTitle(
+        "Nome completo"
+      )
+      .setRequired(true);
+
+
+    form.addTextItem()
+      .setTitle(
+        "Apartamento"
+      )
+      .setRequired(true);
+
+
+    form.addCheckboxItem()
+      .setTitle(
+        "Em quais sorteios deseja participar?"
+      )
+      .setChoiceValues(
+        CONFIG.AMBIENTES
+      )
+      .setRequired(true);
+  }
+
+
+  /*
+   * Vincula à planilha.
+   */
+  form.setDestination(
+    FormApp.DestinationType.SPREADSHEET,
+    ss.getId()
+  );
+
+
+  /*
+   * Remove triggers antigos da função
+   * para evitar duplicidade.
+   */
+  const triggers =
+    ScriptApp.getProjectTriggers();
+
+
+  triggers.forEach(
+    function(trigger) {
+
+      if (
+        trigger.getHandlerFunction() ===
+        "aoEnviarFormulario"
+      ) {
+
+        ScriptApp.deleteTrigger(
+          trigger
+        );
+      }
+    }
+  );
+
+
+  /*
+   * Cria novo trigger.
+   */
+  ScriptApp.newTrigger(
+    "aoEnviarFormulario"
+  )
+    .forSpreadsheet(ss)
+    .onFormSubmit()
+    .create();
+
+
+  SpreadsheetApp.getUi().alert(
+    "Formulário configurado.\n\n" +
+    "ID do formulário:\n" +
+    form.getId()
+  );
+}
+
+
+/************************************************************
+ PAINEL ADMINISTRATIVO
+ ************************************************************/
+
+function verificarAcessoPainel_() {
+
+  const email =
+    String(
+      Session.getActiveUser()
+        .getEmail() || ""
+    )
+    .trim()
+    .toLowerCase();
+
+
+  if (!email) {
+
+    throw new Error(
+      "Não foi possível identificar a conta Google que acessou o painel."
+    );
+  }
+
+
+  const autorizado =
+    EMAILS_AUTORIZADOS
+      .map(function(item) {
+        return item.toLowerCase();
+      })
+      .indexOf(email) !== -1;
+
+
+  if (!autorizado) {
+
+    throw new Error(
+      "Acesso não autorizado."
+    );
+  }
+
+
+  return true;
+}
+
+
+/************************************************************
+ DO GET
+ ************************************************************/
 
 function doGet() {
 
@@ -1492,424 +1889,498 @@ function doGet() {
 
     verificarAcessoPainel_();
 
+
     return HtmlService
-      .createHtmlOutputFromFile("Index")
-      .setTitle("Painel Administrativo – Sorteio dos Salões")
-      .addMetaTag(
-        "viewport",
-        "width=device-width, initial-scale=1"
+      .createHtmlOutputFromFile(
+        "Index"
+      )
+      .setTitle(
+        "Painel – Sorteio dos Salões"
+      )
+      .setXFrameOptionsMode(
+        HtmlService.XFrameOptionsMode.ALLOWALL
       );
 
   } catch (erro) {
 
-    return HtmlService.createHtmlOutput(
-
-      '<div style="font-family:Arial;text-align:center;padding:60px">' +
-
-      '<h2>Acesso restrito</h2>' +
-
-      '<p>Esta área é exclusiva para administradores autorizados.</p>' +
-
-      '<p>Entre com a conta Google cadastrada para acessar o sistema.</p>' +
-
-      '</div>'
-
-    ).setTitle("Acesso restrito");
-
+    return HtmlService
+      .createHtmlOutput(
+        "<h2>Acesso restrito</h2>" +
+        "<p>" +
+        erro.message +
+        "</p>"
+      );
   }
-
 }
 
 
 /************************************************************
- 16. LOCALIZAR GANHADOR ATIVO
-************************************************************/
-
-function localizarGanhadorPainel_(ambiente) {
-
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  const historico = ss.getSheetByName(
-    "Histórico dos Sorteios"
-  );
-
-
-  if (!historico) {
-    return null;
-  }
-
-
-  const dados = historico.getDataRange().getValues();
-
-
-  for (let i = dados.length - 1; i >= 1; i--) {
-
-    if (
-      dados[i][1] === ambiente &&
-      dados[i][5] === "Ganhador"
-    ) {
-
-      return {
-
-        nome: String(dados[i][3]),
-
-        apartamento: String(dados[i][4]),
-
-        data: dados[i][0]
-
-      };
-
-    }
-
-  }
-
-
-  return null;
-
-}
-
-
-/************************************************************
- 17. DADOS GERAIS DO PAINEL
-************************************************************/
+ DADOS DO PAINEL
+ ************************************************************/
 
 function obterDadosPainel() {
 
   verificarAcessoPainel_();
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  criarAbas();
+  const dados =
+    AMBIENTES_PAINEL.map(
+      function(ambiente, indice) {
 
-  atualizarListas_(false);
-
-
-  const nomesAbas = [
-    "Gourmet – Natal",
-    "Festas – Natal",
-    "Gourmet – Ano Novo",
-    "Festas – Ano Novo"
-  ];
-
-
-  const quantidades = [];
-
-  const ganhadores = [];
-
-
-  nomesAbas.forEach(ambiente => {
-
-    const aba = ss.getSheetByName(ambiente);
-
-    quantidades.push(
-      Math.max(0, aba.getLastRow() - 1)
+        return {
+          indice: indice,
+          ambiente: ambiente,
+          ganhador:
+            localizarGanhadorPainel_(
+              indice
+            )
+        };
+      }
     );
 
-    ganhadores.push(
-      localizarGanhadorPainel_(ambiente)
-    );
 
-  });
-
-
-  return {
-
-    quantidades: quantidades,
-
-    ganhadores: ganhadores
-
-  };
-
+  return dados;
 }
 
 
 /************************************************************
- 18. EXECUTAR SORTEIO PELO PAINEL
-************************************************************/
+ LOCALIZAR GANHADOR
+ ************************************************************/
 
-function executarSorteioPainel(indice) {
+function localizarGanhadorPainel_(
+  indice
+) {
 
-  verificarAcessoPainel_();
+  const ambiente =
+    AMBIENTES_PAINEL[indice];
 
-  indice = Number(indice);
+
+  const ss =
+    SpreadsheetApp.getActiveSpreadsheet();
+
+
+  const historico =
+    ss.getSheetByName(
+      "Histórico dos Sorteios"
+    );
 
 
   if (
-    !Number.isInteger(indice) ||
-    indice < 0 ||
-    indice >= AMBIENTES_PAINEL.length
+    !historico ||
+    historico.getLastRow() < 2
   ) {
 
-    throw new Error("Ambiente inválido.");
-
+    return null;
   }
 
 
-  const ambiente = AMBIENTES_PAINEL[indice];
+  const dados =
+    historico.getRange(
+      2,
+      1,
+      historico.getLastRow() - 1,
+      5
+    ).getValues();
 
-  const resultado = sortearAmbiente_(ambiente);
 
-  atualizarResultados_();
+  const ambienteNormalizado =
+    normalizarComparacao_(
+      ambiente
+    );
 
 
-  return resultado;
+  for (
+    let i = dados.length - 1;
+    i >= 0;
+    i--
+  ) {
 
+    const ambienteRegistro =
+      normalizarComparacao_(
+        dados[i][1]
+      );
+
+
+    if (
+      ambienteRegistro ===
+      ambienteNormalizado
+    ) {
+
+      const status =
+        normalizarComparacao_(
+          dados[i][4]
+        );
+
+
+      if (
+        status ===
+        normalizarComparacao_(
+          "Ganhador"
+        )
+      ) {
+
+        return {
+          ambiente: dados[i][1],
+          nome: dados[i][2],
+          apartamento: dados[i][3],
+          data: dados[i][0],
+          status: dados[i][4]
+        };
+      }
+
+
+      return null;
+    }
+  }
+
+
+  return null;
 }
 
 
 /************************************************************
- 19. CONSULTAR RESULTADOS
-************************************************************/
+ EXECUTAR SORTEIO PELO PAINEL
+ ************************************************************/
+
+function executarSorteioPainel(
+  indice
+) {
+
+  verificarAcessoPainel_();
+
+
+  const numero =
+    Number(indice);
+
+
+  if (
+    isNaN(numero) ||
+    numero < 0 ||
+    numero >= AMBIENTES_PAINEL.length
+  ) {
+
+    throw new Error(
+      "Ambiente inválido."
+    );
+  }
+
+
+  return sortearAmbiente_(
+    numero
+  );
+}
+
+
+/************************************************************
+ RESULTADOS DO PAINEL
+ ************************************************************/
 
 function obterResultadosPainel() {
 
   verificarAcessoPainel_();
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  criarAbas();
 
   atualizarResultados_();
 
 
-  const aba = ss.getSheetByName(
-    "Resultados dos Sorteios"
-  );
-
-  const dados = aba.getDataRange().getValues();
+  const ss =
+    SpreadsheetApp.getActiveSpreadsheet();
 
 
-  return dados.slice(1).map(linha => ({
+  const resultados =
+    ss.getSheetByName(
+      "Resultados dos Sorteios"
+    );
 
-    ambiente: String(linha[0] || ""),
 
-    nome: String(linha[1] || ""),
+  if (
+    !resultados ||
+    resultados.getLastRow() < 2
+  ) {
 
-    apartamento: String(linha[2] || ""),
+    return [];
+  }
 
-    data: linha[3] instanceof Date
 
-      ? Utilities.formatDate(
-          linha[3],
-          Session.getScriptTimeZone(),
-          "dd/MM/yyyy HH:mm"
-        )
+  return resultados
+    .getRange(
+      2,
+      1,
+      resultados.getLastRow() - 1,
+      5
+    )
+    .getValues()
+    .map(
+      function(linha) {
 
-      : "",
-
-    situacao: String(linha[4] || "")
-
-  }));
-
+        return {
+          ambiente: linha[0],
+          nome: linha[1],
+          apartamento: linha[2],
+          data: linha[3],
+          status: linha[4]
+        };
+      }
+    );
 }
 
 
 /************************************************************
- 20. CONSULTAR HISTÓRICO
-************************************************************/
+ HISTÓRICO DO PAINEL
+ ************************************************************/
 
 function obterHistoricoPainel() {
 
   verificarAcessoPainel_();
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  criarAbas();
-
-
-  const aba = ss.getSheetByName(
-    "Histórico dos Sorteios"
-  );
-
-  const dados = aba.getDataRange().getValues();
+  const ss =
+    SpreadsheetApp.getActiveSpreadsheet();
 
 
-  return dados.slice(1).map(linha => ({
+  const historico =
+    ss.getSheetByName(
+      "Histórico dos Sorteios"
+    );
 
-    data: linha[0] instanceof Date
 
-      ? Utilities.formatDate(
-          linha[0],
-          Session.getScriptTimeZone(),
-          "dd/MM/yyyy HH:mm:ss"
-        )
+  if (
+    !historico ||
+    historico.getLastRow() < 2
+  ) {
 
-      : "",
+    return [];
+  }
 
-    ambiente: String(linha[1] || ""),
 
-    tipo: String(linha[2] || ""),
+  return historico
+    .getRange(
+      2,
+      1,
+      historico.getLastRow() - 1,
+      5
+    )
+    .getValues()
+    .reverse()
+    .map(
+      function(linha) {
 
-    nome: String(linha[3] || ""),
-
-    apartamento: String(linha[4] || ""),
-
-    situacao: String(linha[5] || ""),
-
-    observacao: String(linha[6] || "")
-
-  }));
-
+        return {
+          data: linha[0],
+          ambiente: linha[1],
+          nome: linha[2],
+          apartamento: linha[3],
+          status: linha[4]
+        };
+      }
+    );
 }
 
 
 /************************************************************
- 21. CONSULTAR GANHADOR PARA DESISTÊNCIA
-************************************************************/
+ GANHADOR DO PAINEL
+ ************************************************************/
 
-function obterGanhadorPainel(indice) {
+function obterGanhadorPainel(
+  indice
+) {
 
   verificarAcessoPainel_();
 
-  indice = Number(indice);
+
+  const numero =
+    Number(indice);
 
 
   if (
-    !Number.isInteger(indice) ||
-    indice < 0 ||
-    indice >= AMBIENTES_PAINEL.length
+    isNaN(numero) ||
+    numero < 0 ||
+    numero >= AMBIENTES_PAINEL.length
   ) {
 
-    throw new Error("Ambiente inválido.");
-
+    throw new Error(
+      "Ambiente inválido."
+    );
   }
 
 
   return localizarGanhadorPainel_(
-    AMBIENTES_PAINEL[indice]
+    numero
   );
-
 }
 
 
 /************************************************************
- 22. REGISTRAR DESISTÊNCIA PELO PAINEL
-************************************************************/
+ DESISTÊNCIA PELO PAINEL
+ ************************************************************/
 
-function registrarDesistenciaPainel(indice) {
+function registrarDesistenciaPainel(
+  indice
+) {
 
   verificarAcessoPainel_();
 
-  indice = Number(indice);
+
+  const numero =
+    Number(indice);
 
 
   if (
-    !Number.isInteger(indice) ||
-    indice < 0 ||
-    indice >= AMBIENTES_PAINEL.length
+    isNaN(numero) ||
+    numero < 0 ||
+    numero >= AMBIENTES_PAINEL.length
   ) {
 
-    throw new Error("Ambiente inválido.");
-
-  }
-
-
-  const ambiente = AMBIENTES_PAINEL[indice];
-
-  const bloqueio = LockService.getScriptLock();
-
-
-  if (!bloqueio.tryLock(10000)) {
-
     throw new Error(
-      "Outra operação está em andamento. Tente novamente."
+      "Ambiente inválido."
     );
-
   }
+
+
+  const lock =
+    LockService.getScriptLock();
+
+
+  lock.waitLock(30000);
 
 
   try {
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ambiente =
+      AMBIENTES_PAINEL[
+        numero
+      ];
 
-    criarAbas();
+
+    const ss =
+      SpreadsheetApp.getActiveSpreadsheet();
 
 
-    const historico = ss.getSheetByName(
-      "Histórico dos Sorteios"
-    );
+    const historico =
+      ss.getSheetByName(
+        "Histórico dos Sorteios"
+      );
 
-    const dados = historico.getDataRange().getValues();
+
+    if (
+      !historico ||
+      historico.getLastRow() < 2
+    ) {
+
+      throw new Error(
+        "Não existe histórico para este ambiente."
+      );
+    }
+
+
+    const dados =
+      historico.getRange(
+        2,
+        1,
+        historico.getLastRow() - 1,
+        5
+      ).getValues();
+
+
+    const ambienteNormalizado =
+      normalizarComparacao_(
+        ambiente
+      );
 
 
     let linhaGanhador = -1;
 
 
-    for (let i = dados.length - 1; i >= 1; i--) {
+    /*
+     * Procura o ganhador ativo atual.
+     */
+    for (
+      let i = dados.length - 1;
+      i >= 0;
+      i--
+    ) {
+
+      const ambienteRegistro =
+        normalizarComparacao_(
+          dados[i][1]
+        );
+
 
       if (
-        dados[i][1] === ambiente &&
-        dados[i][5] === "Ganhador"
+        ambienteRegistro !==
+        ambienteNormalizado
       ) {
-
-        linhaGanhador = i + 1;
-
-        break;
-
+        continue;
       }
 
+
+      const status =
+        normalizarComparacao_(
+          dados[i][4]
+        );
+
+
+      if (
+        status ===
+        normalizarComparacao_(
+          "Ganhador"
+        )
+      ) {
+
+        linhaGanhador =
+          i + 2;
+
+      } else {
+
+        throw new Error(
+          "Este ambiente não possui ganhador ativo."
+        );
+      }
+
+
+      break;
     }
 
 
-    if (linhaGanhador < 0) {
+    if (
+      linhaGanhador === -1
+    ) {
 
       throw new Error(
-        "Não existe ganhador ativo neste ambiente."
+        "Não foi encontrado ganhador ativo."
       );
-
     }
 
 
-    const ganhador = dados[linhaGanhador - 1];
-
-
-    // Registrar a desistência no histórico.
-
-    historico.getRange(linhaGanhador, 6)
-      .setValue("Desistiu");
-
-
-    historico.getRange(linhaGanhador, 7)
+    /*
+     * Registra desistência.
+     */
+    historico
+      .getRange(
+        linhaGanhador,
+        5
+      )
       .setValue(
-
-        "Desistência registrada em " +
-
-        Utilities.formatDate(
-          new Date(),
-          Session.getScriptTimeZone(),
-          "dd/MM/yyyy HH:mm"
-        )
-
+        "Desistiu"
       );
 
 
-    // Realizar novo sorteio sem adquirir outro bloqueio.
-
-    const resultado =
-      sortearAmbienteInterno_(ambiente);
+    /*
+     * Novo sorteio sem adquirir outro lock.
+     */
+    const novoGanhador =
+      sortearAmbienteInterno_(
+        numero
+      );
 
 
     atualizarResultados_();
 
 
-    return (
-
-      "DESISTÊNCIA REGISTRADA\n\n" +
-
-      "Ganhador anterior: " + ganhador[3] +
-
-      "\nApartamento: " + ganhador[4] +
-
-      "\n\n" + resultado
-
-    );
+    return novoGanhador;
 
   } finally {
 
-    if (bloqueio.hasLock()) {
-      bloqueio.releaseLock();
-    }
-
+    lock.releaseLock();
   }
-
 }
