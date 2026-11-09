@@ -789,25 +789,64 @@ function sortearTodos() {
 }
 
 
+
 /************************************************************
  11. EXECUTAR SORTEIO DE UM AMBIENTE
+ COM PROTEÇÃO CONTRA EXECUÇÕES SIMULTÂNEAS
 ************************************************************/
 
 function sortearAmbiente_(ambiente, semAlerta) {
+
+  const bloqueio = LockService.getScriptLock();
+
+  // Aguarda até 10 segundos para obter o bloqueio.
+  if (!bloqueio.tryLock(10000)) {
+
+    return "Não foi possível realizar o sorteio de " +
+      ambiente +
+      ". Outra operação está em andamento. Tente novamente.";
+
+  }
+
+  try {
+
+    return sortearAmbienteInterno_(ambiente);
+
+  } catch (erro) {
+
+    console.error(erro);
+
+    return "Erro ao realizar o sorteio de " +
+      ambiente + ": " + erro.message;
+
+  } finally {
+
+    // Libera o bloqueio mesmo se ocorrer algum erro.
+    if (bloqueio.hasLock()) {
+      bloqueio.releaseLock();
+    }
+
+  }
+
+}
+
+
+/************************************************************
+ 11.1. EXECUÇÃO INTERNA DO SORTEIO
+************************************************************/
+
+function sortearAmbienteInterno_(ambiente) {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   criarAbas();
 
-
-  // Atualiza as listas antes de cada sorteio.
-
+  // Atualiza as listas antes do sorteio.
   if (!atualizarListas_(false)) {
 
     return "Não foi possível atualizar as listas.";
 
   }
-
 
   const abaLista = ss.getSheetByName(ambiente);
 
@@ -815,23 +854,17 @@ function sortearAmbiente_(ambiente, semAlerta) {
     "Histórico dos Sorteios"
   );
 
-
   const dadosHistorico =
     historico.getDataRange().getValues();
 
-
-  // Impede sorteio duplicado enquanto existir
+  // Impede sorteio duplicado enquanto houver
   // um ganhador ativo naquele ambiente.
-
   const ganhadorAtivo = dadosHistorico
     .slice(1)
     .some(linha =>
-
       linha[1] === ambiente &&
       linha[5] === "Ganhador"
-
     );
-
 
   if (ganhadorAtivo) {
 
@@ -840,10 +873,8 @@ function sortearAmbiente_(ambiente, semAlerta) {
 
   }
 
-
   const dadosLista =
     abaLista.getDataRange().getValues();
-
 
   if (dadosLista.length < 2) {
 
@@ -852,20 +883,15 @@ function sortearAmbiente_(ambiente, semAlerta) {
 
   }
 
-
   // Recupera os apartamentos que desistiram
   // somente deste ambiente.
-
   const desistentes = new Set();
-
 
   dadosHistorico.slice(1).forEach(linha => {
 
     if (
-
       linha[1] === ambiente &&
       linha[5] === "Desistiu"
-
     ) {
 
       desistentes.add(
@@ -875,7 +901,6 @@ function sortearAmbiente_(ambiente, semAlerta) {
     }
 
   });
-
 
   const candidatos = dadosLista
     .slice(1)
@@ -887,20 +912,15 @@ function sortearAmbiente_(ambiente, semAlerta) {
         linha[1] || ""
       ).trim();
 
-
       return (
-
         nome &&
         apartamento &&
-
         !desistentes.has(
           normalizar_(apartamento)
         )
-
       );
 
     });
-
 
   if (candidatos.length === 0) {
 
@@ -909,111 +929,84 @@ function sortearAmbiente_(ambiente, semAlerta) {
 
   }
 
-
   // Sorteio aleatório.
-
   const indice = Math.floor(
     Math.random() * candidatos.length
   );
 
-
   const ganhador = candidatos[indice];
 
-
   // Registrar no histórico.
-
   historico.appendRow([
 
     new Date(),
-
     ambiente,
-
     "Sorteio",
-
     ganhador[0],
-
     ganhador[1],
-
     "Ganhador",
-
     ""
 
   ]);
 
-
   atualizarResultados_();
 
-
   return (
-
     ambiente +
-
     "\nGanhador: " + ganhador[0] +
-
     "\nApartamento: " + ganhador[1]
-
   );
 
 }
 
 
+
+
 /************************************************************
  12. REGISTRAR DESISTÊNCIA
+ COM PROTEÇÃO CONTRA EXECUÇÕES SIMULTÂNEAS
 ************************************************************/
 
 function registrarDesistencia() {
 
   const ui = SpreadsheetApp.getUi();
 
-
   const ambientes = [
 
     "Gourmet – Natal",
-
     "Festas – Natal",
-
     "Gourmet – Ano Novo",
-
     "Festas – Ano Novo"
 
   ];
-
 
   const respostaAmbiente = ui.prompt(
 
     "REGISTRAR DESISTÊNCIA",
 
     "Digite exatamente o nome do ambiente:\n\n" +
-
     ambientes.join("\n"),
 
     ui.ButtonSet.OK_CANCEL
 
   );
 
-
   if (
     respostaAmbiente.getSelectedButton() !==
     ui.Button.OK
   ) {
-
     return;
-
   }
-
 
   const ambiente = ambientes.find(
 
     nome =>
-
       normalizar_(nome) ===
-
       normalizar_(
         respostaAmbiente.getResponseText()
       )
 
   );
-
 
   if (!ambiente) {
 
@@ -1023,19 +1016,15 @@ function registrarDesistencia() {
 
   }
 
-
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   const historico = ss.getSheetByName(
     "Histórico dos Sorteios"
   );
 
-
   const dados = historico.getDataRange().getValues();
 
-
   let linhaGanhador = -1;
-
 
   for (
     let i = dados.length - 1;
@@ -1044,11 +1033,8 @@ function registrarDesistencia() {
   ) {
 
     if (
-
       dados[i][1] === ambiente &&
-
       dados[i][5] === "Ganhador"
-
     ) {
 
       linhaGanhador = i + 1;
@@ -1058,7 +1044,6 @@ function registrarDesistencia() {
     }
 
   }
-
 
   if (linhaGanhador < 0) {
 
@@ -1070,9 +1055,7 @@ function registrarDesistencia() {
 
   }
 
-
   const ganhador = dados[linhaGanhador - 1];
-
 
   const confirmacao = ui.alert(
 
@@ -1090,62 +1073,131 @@ function registrarDesistencia() {
 
   );
 
-
   if (confirmacao !== ui.Button.YES) {
+    return;
+  }
+
+  // Bloqueia outras operações durante a desistência
+  // e o novo sorteio.
+  const bloqueio = LockService.getScriptLock();
+
+  if (!bloqueio.tryLock(10000)) {
+
+    ui.alert(
+      "Outra operação está em andamento. " +
+      "Tente registrar a desistência novamente."
+    );
 
     return;
 
   }
 
+  try {
 
-  // Marcar o antigo ganhador como desistente.
+    // Confere novamente o ganhador após obter o bloqueio.
+    const dadosAtualizados =
+      historico.getDataRange().getValues();
 
-  historico.getRange(
-    linhaGanhador,
-    6
-  ).setValue("Desistiu");
+    let linhaAtual = -1;
 
+    for (
+      let i = dadosAtualizados.length - 1;
+      i >= 1;
+      i--
+    ) {
 
-  historico.getRange(
-    linhaGanhador,
-    7
-  ).setValue(
+      if (
+        dadosAtualizados[i][1] === ambiente &&
+        dadosAtualizados[i][5] === "Ganhador"
+      ) {
 
-    "Desistência registrada em " +
+        linhaAtual = i + 1;
 
-    Utilities.formatDate(
+        break;
 
-      new Date(),
+      }
 
-      Session.getScriptTimeZone(),
+    }
 
-      "dd/MM/yyyy HH:mm"
+    if (linhaAtual < 0) {
 
-    )
+      ui.alert(
+        "O ganhador ativo foi alterado por outra operação. " +
+        "Verifique o histórico antes de continuar."
+      );
 
-  );
+      return;
 
+    }
 
-  // Realizar novo sorteio no mesmo ambiente.
+    const ganhadorAtual =
+      dadosAtualizados[linhaAtual - 1];
 
-  const resultado = sortearAmbiente_(
-    ambiente,
-    true
-  );
+    // Marcar o antigo ganhador como desistente.
+    historico.getRange(
+      linhaAtual,
+      6
+    ).setValue("Desistiu");
 
+    historico.getRange(
+      linhaAtual,
+      7
+    ).setValue(
 
-  atualizarResultados_();
+      "Desistência registrada em " +
 
+      Utilities.formatDate(
 
-  ui.alert(
+        new Date(),
 
-    "NOVO SORTEIO REALIZADO\n\n" +
+        Session.getScriptTimeZone(),
 
-    resultado
+        "dd/MM/yyyy HH:mm"
 
-  );
+      )
+
+    );
+
+    // Realizar novo sorteio sem tentar adquirir
+    // novamente o bloqueio já obtido.
+    const resultado = sortearAmbienteInterno_(
+      ambiente
+    );
+
+    atualizarResultados_();
+
+    ui.alert(
+
+      "NOVO SORTEIO REALIZADO\n\n" +
+
+      "Desistente: " + ganhadorAtual[3] +
+
+      "\nApartamento: " + ganhadorAtual[4] +
+
+      "\n\n" + resultado
+
+    );
+
+  } catch (erro) {
+
+    console.error(erro);
+
+    ui.alert(
+      "Ocorreu um erro ao registrar a desistência:\n\n" +
+      erro.message
+    );
+
+  } finally {
+
+    // Libera o bloqueio mesmo se ocorrer algum erro.
+    if (bloqueio.hasLock()) {
+      bloqueio.releaseLock();
+    }
+
+  }
 
 }
+
 
 
 /************************************************************
