@@ -1,4 +1,3 @@
-
 /************************************************************
  SISTEMA DE SORTEIO – NATAL E ANO NOVO
  PLANILHA: SORTEIO FIM DE ANO
@@ -42,6 +41,22 @@ const CONFIG = {
 
 const PROPRIEDADES =
   PropertiesService.getScriptProperties();
+
+
+/************************************************************
+ CONFIGURAÇÃO DO APLICATIVO ADMINISTRATIVO
+************************************************************/
+
+const EMAILS_AUTORIZADOS = [
+  "rseneda@gmail.com"
+];
+
+const AMBIENTES_PAINEL = [
+  "Gourmet – Natal",
+  "Festas – Natal",
+  "Gourmet – Ano Novo",
+  "Festas – Ano Novo"
+];
 
 
 /************************************************************
@@ -111,14 +126,21 @@ function criarAbas() {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  CONFIG.ABAS.forEach(nome => {
+  // Criar as quatro abas de inscrições.
+
+  const abasInscricoes = [
+    "Gourmet – Natal",
+    "Festas – Natal",
+    "Gourmet – Ano Novo",
+    "Festas – Ano Novo"
+  ];
+
+  abasInscricoes.forEach(nome => {
 
     let aba = ss.getSheetByName(nome);
 
     if (!aba) {
-
       aba = ss.insertSheet(nome);
-
     }
 
     if (aba.getLastRow() === 0) {
@@ -134,9 +156,17 @@ function criarAbas() {
   });
 
 
-  const resultados = ss.getSheetByName(
+  // Criar a aba de resultados com cabeçalho correto.
+
+  let resultados = ss.getSheetByName(
     "Resultados dos Sorteios"
   );
+
+  if (!resultados) {
+    resultados = ss.insertSheet(
+      "Resultados dos Sorteios"
+    );
+  }
 
   if (resultados.getLastRow() === 0) {
 
@@ -148,12 +178,38 @@ function criarAbas() {
       "Situação"
     ]);
 
+  } else {
+
+    const cabecalho = resultados
+      .getRange(1, 1, 1, 5)
+      .getDisplayValues()[0];
+
+    if (cabecalho[0] === "Nome completo") {
+
+      resultados.getRange(1, 1, 1, 5).setValues([[
+        "Ambiente",
+        "Nome do ganhador",
+        "Apartamento",
+        "Data do sorteio",
+        "Situação"
+      ]]);
+
+    }
+
   }
 
 
-  const historico = ss.getSheetByName(
+  // Criar a aba de histórico com cabeçalho correto.
+
+  let historico = ss.getSheetByName(
     "Histórico dos Sorteios"
   );
+
+  if (!historico) {
+    historico = ss.insertSheet(
+      "Histórico dos Sorteios"
+    );
+  }
 
   if (historico.getLastRow() === 0) {
 
@@ -166,6 +222,26 @@ function criarAbas() {
       "Situação",
       "Observação"
     ]);
+
+  } else {
+
+    const cabecalho = historico
+      .getRange(1, 1, 1, 7)
+      .getDisplayValues()[0];
+
+    if (cabecalho[0] === "Nome completo") {
+
+      historico.getRange(1, 1, 1, 7).setValues([[
+        "Data e hora",
+        "Ambiente",
+        "Tipo de registro",
+        "Nome completo",
+        "Apartamento",
+        "Situação",
+        "Observação"
+      ]]);
+
+    }
 
   }
 
@@ -191,13 +267,9 @@ function criarFormulario() {
   if (idExistente) {
 
     try {
-
       form = FormApp.openById(idExistente);
-
     } catch (erro) {
-
       form = null;
-
     }
 
   }
@@ -225,16 +297,12 @@ function criarFormulario() {
 
 
     form.addTextItem()
-
       .setTitle("Nome completo")
-
       .setRequired(true);
 
 
     form.addTextItem()
-
       .setTitle("Apartamento")
-
       .setRequired(true);
 
 
@@ -277,22 +345,16 @@ function criarFormulario() {
   const gatilhos = ScriptApp.getProjectTriggers();
 
   const existeGatilho = gatilhos.some(
-
     t =>
-      t.getHandlerFunction() ===
-      "aoEnviarFormulario"
-
+      t.getHandlerFunction() === "aoEnviarFormulario"
   );
 
 
   if (!existeGatilho) {
 
     ScriptApp.newTrigger("aoEnviarFormulario")
-
       .forSpreadsheet(ss)
-
       .onFormSubmit()
-
       .create();
 
   }
@@ -321,6 +383,12 @@ function criarFormulario() {
 
 function aoEnviarFormulario(e) {
 
+  if (!e || !e.range) {
+    throw new Error(
+      "Esta função deve ser executada pelo envio do formulário."
+    );
+  }
+
   const aba = e.range.getSheet();
 
   const linha = e.range.getRow();
@@ -328,43 +396,37 @@ function aoEnviarFormulario(e) {
   const ultimaColuna = aba.getLastColumn();
 
 
+  // Converter respostas textuais para maiúsculas.
+
   if (ultimaColuna >= 2) {
 
     const intervalo = aba.getRange(
-
       linha,
-
       2,
-
       1,
-
       ultimaColuna - 1
-
     );
-
 
     const valores = intervalo.getValues();
 
+    const valoresMaiusculos = valores.map(linhaAtual =>
 
-    const valoresMaiusculos = valores.map(linha =>
-
-      linha.map(valor =>
+      linhaAtual.map(valor =>
 
         typeof valor === "string"
-
           ? valor.toLocaleUpperCase("pt-BR")
-
           : valor
 
       )
 
     );
 
-
     intervalo.setValues(valoresMaiusculos);
 
   }
 
+
+  // Atualizar as quatro listas automaticamente.
 
   atualizarListas_(false);
 
@@ -391,6 +453,20 @@ function normalizar_(valor) {
 
 
 /************************************************************
+ 5.1. NORMALIZAR TEXTO PARA COMPARAÇÃO
+ IGNORA ACENTOS, MAIÚSCULAS, ESPAÇOS E PONTUAÇÃO
+************************************************************/
+
+function normalizarComparacao_(valor) {
+
+  return normalizar_(valor)
+
+    .replace(/[^a-z0-9]/g, "");
+
+}
+
+
+/************************************************************
  6. LOCALIZAR A ABA OFICIAL DE RESPOSTAS
 ************************************************************/
 
@@ -403,58 +479,34 @@ function localizarAbaRespostas_() {
   );
 
 
-  if (!aba) {
-
+  if (!aba || aba.getLastRow() < 1) {
     return null;
-
-  }
-
-
-  if (aba.getLastRow() < 1) {
-
-    return null;
-
   }
 
 
   const cabecalhos = aba.getRange(
-
     1,
-
     1,
-
     1,
-
     aba.getLastColumn()
-
   ).getDisplayValues()[0].map(normalizar_);
 
 
   const nome = cabecalhos.some(
-
     v => v.includes("nome completo")
-
   );
-
 
   const apartamento = cabecalhos.some(
-
     v => v.includes("apartamento")
-
   );
 
-
   const escolhas = cabecalhos.some(
-
     v => v.includes("em quais sorteios")
-
   );
 
 
   return nome && apartamento && escolhas
-
     ? aba
-
     : null;
 
 }
@@ -467,7 +519,6 @@ function localizarAbaRespostas_() {
 function atualizarListas() {
 
   const resultado = atualizarListas_(true);
-
 
   if (resultado) {
 
@@ -524,14 +575,11 @@ function atualizarListas_(mostrarErro) {
 
 
   if (dados.length < 2) {
-
     return false;
-
   }
 
 
-  const cabecalhos =
-    exibidos[0].map(normalizar_);
+  const cabecalhos = exibidos[0].map(normalizar_);
 
 
   const colData = cabecalhos.findIndex(
@@ -565,12 +613,10 @@ function atualizarListas_(mostrarErro) {
 
 
   if (
-
     colData < 0 ||
     colNome < 0 ||
     colApartamento < 0 ||
     colEscolhas < 0
-
   ) {
 
     if (mostrarErro) {
@@ -589,7 +635,7 @@ function atualizarListas_(mostrarErro) {
 
 
   /********************************************************
-   GUARDA A ÚLTIMA RESPOSTA DE CADA APARTAMENTO
+   GUARDAR A ÚLTIMA RESPOSTA DE CADA APARTAMENTO
   ********************************************************/
 
   const respostasMaisRecentes = new Map();
@@ -598,23 +644,17 @@ function atualizarListas_(mostrarErro) {
   for (let i = 1; i < dados.length; i++) {
 
     const nome = String(
-
       exibidos[i][colNome] || ""
-
     ).trim();
 
 
     const apartamento = String(
-
       exibidos[i][colApartamento] || ""
-
     ).trim();
 
 
     const escolhas = String(
-
       exibidos[i][colEscolhas] || ""
-
     ).trim();
 
 
@@ -622,34 +662,26 @@ function atualizarListas_(mostrarErro) {
 
 
     if (
-
       !nome ||
       !apartamento ||
       !escolhas ||
       !(data instanceof Date) ||
       isNaN(data.getTime())
-
     ) {
-
       continue;
-
     }
 
 
     const chave = normalizar_(apartamento);
 
-    const anterior =
-      respostasMaisRecentes.get(chave);
+    const anterior = respostasMaisRecentes.get(chave);
 
 
-    // Se houver outra resposta mais recente,
-    // ela substitui integralmente a anterior.
+    // A resposta mais recente substitui integralmente a anterior.
 
     if (
-
       !anterior ||
       data.getTime() >= anterior.data.getTime()
-
     ) {
 
       respostasMaisRecentes.set(chave, {
@@ -676,75 +708,67 @@ function atualizarListas_(mostrarErro) {
   const anoAtual = new Date().getFullYear();
 
   const limite = new Date(
-
     anoAtual,
-
     11,
-
     10,
-
     23,
-
     59,
-
     59
-
   );
 
 
   const listas = [
-
     [],
     [],
     [],
     []
-
   ];
 
 
   /********************************************************
-   DISTRIBUI SOMENTE A ÚLTIMA RESPOSTA
+   DISTRIBUIR SOMENTE A ÚLTIMA RESPOSTA
   ********************************************************/
 
   respostasMaisRecentes.forEach(resposta => {
 
     if (
-
       resposta.data.getFullYear() !== anoAtual ||
       resposta.data > limite
-
     ) {
-
       return;
-
     }
 
 
-    CONFIG.AMBIENTES.forEach(
+    const escolhasNormalizadas =
+      normalizarComparacao_(resposta.escolhas);
 
-      (ambiente, indice) => {
 
-        if (
+    CONFIG.AMBIENTES.forEach((ambiente, indice) => {
 
-          resposta.escolhas.includes(ambiente)
+      const ambienteNormalizado =
+        normalizarComparacao_(ambiente);
 
-        ) {
 
-          listas[indice].push([
+      // Compara ignorando maiúsculas, acentos,
+      // espaços e sinais de pontuação.
 
-            resposta.nome,
+      if (
+        escolhasNormalizadas.includes(ambienteNormalizado)
+      ) {
 
-            resposta.apartamento,
+        listas[indice].push([
 
-            resposta.data
+          resposta.nome,
 
-          ]);
+          resposta.apartamento,
 
-        }
+          resposta.data
+
+        ]);
 
       }
 
-    );
+    });
 
   });
 
@@ -754,15 +778,10 @@ function atualizarListas_(mostrarErro) {
   ********************************************************/
 
   const nomesAbas = [
-
     "Gourmet – Natal",
-
     "Festas – Natal",
-
     "Gourmet – Ano Novo",
-
     "Festas – Ano Novo"
-
   ];
 
 
@@ -776,9 +795,7 @@ function atualizarListas_(mostrarErro) {
     aba.getRange(1, 1, 1, 3).setValues([[
 
       "Nome completo",
-
       "Apartamento",
-
       "Data da inscrição"
 
     ]]);
@@ -787,15 +804,10 @@ function atualizarListas_(mostrarErro) {
     if (listas[indice].length > 0) {
 
       aba.getRange(
-
         2,
-
         1,
-
         listas[indice].length,
-
         3
-
       ).setValues(listas[indice]);
 
     }
@@ -870,9 +882,7 @@ function sortearTodos() {
   if (!atualizarListas_(false)) {
 
     SpreadsheetApp.getUi().alert(
-
       "Não foi possível atualizar as listas."
-
     );
 
     return;
@@ -881,15 +891,10 @@ function sortearTodos() {
 
 
   const ambientes = [
-
     "Gourmet – Natal",
-
     "Festas – Natal",
-
     "Gourmet – Ano Novo",
-
     "Festas – Ano Novo"
-
   ];
 
 
@@ -899,9 +904,7 @@ function sortearTodos() {
   ambientes.forEach(ambiente => {
 
     mensagens.push(
-
       sortearAmbiente_(ambiente)
-
     );
 
   });
@@ -931,14 +934,10 @@ function sortearAmbiente_(ambiente) {
   const bloqueio = LockService.getScriptLock();
 
 
-  // Aguarda até 10 segundos para obter o bloqueio.
-
   if (!bloqueio.tryLock(10000)) {
 
     return "Não foi possível realizar o sorteio de " +
-
       ambiente +
-
       ". Outra operação está em andamento. Tente novamente.";
 
   }
@@ -953,17 +952,12 @@ function sortearAmbiente_(ambiente) {
     console.error(erro);
 
     return "Erro ao realizar o sorteio de " +
-
       ambiente + ": " + erro.message;
 
   } finally {
 
-    // Libera o bloqueio mesmo se ocorrer algum erro.
-
     if (bloqueio.hasLock()) {
-
       bloqueio.releaseLock();
-
     }
 
   }
@@ -983,8 +977,6 @@ function sortearAmbienteInterno_(ambiente) {
   criarAbas();
 
 
-  // Atualiza as listas antes de cada sorteio.
-
   if (!atualizarListas_(false)) {
 
     return "Não foi possível atualizar as listas.";
@@ -995,9 +987,7 @@ function sortearAmbienteInterno_(ambiente) {
   const abaLista = ss.getSheetByName(ambiente);
 
   const historico = ss.getSheetByName(
-
     "Histórico dos Sorteios"
-
   );
 
 
@@ -1005,13 +995,10 @@ function sortearAmbienteInterno_(ambiente) {
     historico.getDataRange().getValues();
 
 
-  // Impede sorteio duplicado enquanto houver
-  // um ganhador ativo naquele ambiente.
+  // Impedir sorteio duplicado se houver ganhador ativo.
 
   const ganhadorAtivo = dadosHistorico
-
     .slice(1)
-
     .some(linha =>
 
       linha[1] === ambiente &&
@@ -1023,26 +1010,23 @@ function sortearAmbienteInterno_(ambiente) {
   if (ganhadorAtivo) {
 
     return ambiente +
-
       ": já possui um ganhador ativo.";
 
   }
 
 
-  const dadosLista =
-    abaLista.getDataRange().getValues();
+  const dadosLista = abaLista.getDataRange().getValues();
 
 
   if (dadosLista.length < 2) {
 
     return ambiente +
-
       ": não há inscritos.";
 
   }
 
 
-  // Recupera os apartamentos que desistiram
+  // Recuperar apartamentos que desistiram
   // somente deste ambiente.
 
   const desistentes = new Set();
@@ -1051,16 +1035,12 @@ function sortearAmbienteInterno_(ambiente) {
   dadosHistorico.slice(1).forEach(linha => {
 
     if (
-
       linha[1] === ambiente &&
       linha[5] === "Desistiu"
-
     ) {
 
       desistentes.add(
-
         normalizar_(linha[4])
-
       );
 
     }
@@ -1069,36 +1049,18 @@ function sortearAmbienteInterno_(ambiente) {
 
 
   const candidatos = dadosLista
-
     .slice(1)
-
     .filter(linha => {
 
-      const nome = String(
+      const nome = String(linha[0] || "").trim();
 
-        linha[0] || ""
-
-      ).trim();
-
-
-      const apartamento = String(
-
-        linha[1] || ""
-
-      ).trim();
+      const apartamento = String(linha[1] || "").trim();
 
 
       return (
-
         nome &&
         apartamento &&
-
-        !desistentes.has(
-
-          normalizar_(apartamento)
-
-        )
-
+        !desistentes.has(normalizar_(apartamento))
       );
 
     });
@@ -1107,7 +1069,6 @@ function sortearAmbienteInterno_(ambiente) {
   if (candidatos.length === 0) {
 
     return ambiente +
-
       ": não há candidatos disponíveis.";
 
   }
@@ -1116,11 +1077,8 @@ function sortearAmbienteInterno_(ambiente) {
   // Sorteio aleatório.
 
   const indice = Math.floor(
-
     Math.random() * candidatos.length
-
   );
-
 
   const ganhador = candidatos[indice];
 
@@ -1163,8 +1121,7 @@ function sortearAmbienteInterno_(ambiente) {
 
 
 /************************************************************
- 12. REGISTRAR DESISTÊNCIA
- COM PROTEÇÃO CONTRA EXECUÇÕES SIMULTÂNEAS
+ 12. REGISTRAR DESISTÊNCIA PELA PLANILHA
 ************************************************************/
 
 function registrarDesistencia() {
@@ -1173,15 +1130,10 @@ function registrarDesistencia() {
 
 
   const ambientes = [
-
     "Gourmet – Natal",
-
     "Festas – Natal",
-
     "Gourmet – Ano Novo",
-
     "Festas – Ano Novo"
-
   ];
 
 
@@ -1190,7 +1142,6 @@ function registrarDesistencia() {
     "REGISTRAR DESISTÊNCIA",
 
     "Digite exatamente o nome do ambiente:\n\n" +
-
     ambientes.join("\n"),
 
     ui.ButtonSet.OK_CANCEL
@@ -1199,29 +1150,18 @@ function registrarDesistencia() {
 
 
   if (
-
     respostaAmbiente.getSelectedButton() !==
-
     ui.Button.OK
-
   ) {
-
     return;
-
   }
 
 
   const ambiente = ambientes.find(
 
     nome =>
-
       normalizar_(nome) ===
-
-      normalizar_(
-
-        respostaAmbiente.getResponseText()
-
-      )
+      normalizar_(respostaAmbiente.getResponseText())
 
   );
 
@@ -1238,34 +1178,20 @@ function registrarDesistencia() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   const historico = ss.getSheetByName(
-
     "Histórico dos Sorteios"
-
   );
 
 
   const dados = historico.getDataRange().getValues();
 
-
   let linhaGanhador = -1;
 
 
-  for (
-
-    let i = dados.length - 1;
-
-    i >= 1;
-
-    i--
-
-  ) {
+  for (let i = dados.length - 1; i >= 1; i--) {
 
     if (
-
       dados[i][1] === ambiente &&
-
       dados[i][5] === "Ganhador"
-
     ) {
 
       linhaGanhador = i + 1;
@@ -1280,9 +1206,7 @@ function registrarDesistencia() {
   if (linhaGanhador < 0) {
 
     ui.alert(
-
       "Não existe ganhador ativo nesse ambiente."
-
     );
 
     return;
@@ -1311,14 +1235,9 @@ function registrarDesistencia() {
 
 
   if (confirmacao !== ui.Button.YES) {
-
     return;
-
   }
 
-
-  // Bloqueia outras operações durante a desistência
-  // e o novo sorteio.
 
   const bloqueio = LockService.getScriptLock();
 
@@ -1326,11 +1245,7 @@ function registrarDesistencia() {
   if (!bloqueio.tryLock(10000)) {
 
     ui.alert(
-
-      "Outra operação está em andamento. " +
-
-      "Tente registrar a desistência novamente."
-
+      "Outra operação está em andamento. Tente novamente."
     );
 
     return;
@@ -1340,31 +1255,19 @@ function registrarDesistencia() {
 
   try {
 
-    // Confere novamente o ganhador após obter o bloqueio.
+    // Conferir novamente o ganhador após obter o bloqueio.
 
     const dadosAtualizados =
       historico.getDataRange().getValues();
 
-
     let linhaAtual = -1;
 
 
-    for (
-
-      let i = dadosAtualizados.length - 1;
-
-      i >= 1;
-
-      i--
-
-    ) {
+    for (let i = dadosAtualizados.length - 1; i >= 1; i--) {
 
       if (
-
         dadosAtualizados[i][1] === ambiente &&
-
         dadosAtualizados[i][5] === "Ganhador"
-
       ) {
 
         linhaAtual = i + 1;
@@ -1379,11 +1282,7 @@ function registrarDesistencia() {
     if (linhaAtual < 0) {
 
       ui.alert(
-
-        "O ganhador ativo foi alterado por outra operação. " +
-
-        "Verifique o histórico antes de continuar."
-
+        "O ganhador ativo foi alterado por outra operação. Verifique o histórico."
       );
 
       return;
@@ -1395,48 +1294,26 @@ function registrarDesistencia() {
       dadosAtualizados[linhaAtual - 1];
 
 
-    // Marcar o antigo ganhador como desistente.
-
-    historico.getRange(
-
-      linhaAtual,
-
-      6
-
-    ).setValue("Desistiu");
+    historico.getRange(linhaAtual, 6)
+      .setValue("Desistiu");
 
 
-    historico.getRange(
+    historico.getRange(linhaAtual, 7)
+      .setValue(
 
-      linhaAtual,
+        "Desistência registrada em " +
 
-      7
+        Utilities.formatDate(
+          new Date(),
+          Session.getScriptTimeZone(),
+          "dd/MM/yyyy HH:mm"
+        )
 
-    ).setValue(
-
-      "Desistência registrada em " +
-
-      Utilities.formatDate(
-
-        new Date(),
-
-        Session.getScriptTimeZone(),
-
-        "dd/MM/yyyy HH:mm"
-
-      )
-
-    );
+      );
 
 
-    // Realizar novo sorteio sem adquirir
-    // novamente o bloqueio já obtido.
-
-    const resultado = sortearAmbienteInterno_(
-
-      ambiente
-
-    );
+    const resultado =
+      sortearAmbienteInterno_(ambiente);
 
 
     atualizarResultados_();
@@ -1459,21 +1336,14 @@ function registrarDesistencia() {
     console.error(erro);
 
     ui.alert(
-
       "Ocorreu um erro ao registrar a desistência:\n\n" +
-
       erro.message
-
     );
 
   } finally {
 
-    // Libera o bloqueio mesmo se ocorrer algum erro.
-
     if (bloqueio.hasLock()) {
-
       bloqueio.releaseLock();
-
     }
 
   }
@@ -1489,18 +1359,15 @@ function atualizarResultados_() {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
+  criarAbas();
+
 
   const aba = ss.getSheetByName(
-
     "Resultados dos Sorteios"
-
   );
 
-
   const historico = ss.getSheetByName(
-
     "Histórico dos Sorteios"
-
   );
 
 
@@ -1513,28 +1380,19 @@ function atualizarResultados_() {
   aba.appendRow([
 
     "Ambiente",
-
     "Nome do ganhador",
-
     "Apartamento",
-
     "Data do sorteio",
-
     "Situação"
 
   ]);
 
 
   const ambientes = [
-
     "Gourmet – Natal",
-
     "Festas – Natal",
-
     "Gourmet – Ano Novo",
-
     "Festas – Ano Novo"
-
   ];
 
 
@@ -1543,22 +1401,11 @@ function atualizarResultados_() {
     let ganhador = null;
 
 
-    for (
-
-      let i = dados.length - 1;
-
-      i >= 1;
-
-      i--
-
-    ) {
+    for (let i = dados.length - 1; i >= 1; i--) {
 
       if (
-
         dados[i][1] === ambiente &&
-
         dados[i][5] === "Ganhador"
-
       ) {
 
         ganhador = dados[i];
@@ -1575,13 +1422,9 @@ function atualizarResultados_() {
       aba.appendRow([
 
         ambiente,
-
         ganhador[3],
-
         ganhador[4],
-
         ganhador[0],
-
         "Ganhador"
 
       ]);
@@ -1591,13 +1434,9 @@ function atualizarResultados_() {
       aba.appendRow([
 
         ambiente,
-
         "Aguardando sorteio",
-
         "",
-
         "",
-
         "Pendente"
 
       ]);
@@ -1615,23 +1454,7 @@ function atualizarResultados_() {
 
 
 /************************************************************
- 14. APLICATIVO ADMINISTRATIVO – INTEGRAÇÃO
-************************************************************/
-
-const EMAILS_AUTORIZADOS = [
-  "rseneda@gmail.com"
-];
-
-const AMBIENTES_PAINEL = [
-  "Gourmet – Natal",
-  "Festas – Natal",
-  "Gourmet – Ano Novo",
-  "Festas – Ano Novo"
-];
-
-
-/************************************************************
- VERIFICAR ACESSO DO ADMINISTRADOR
+ 14. VERIFICAR ACESSO DO ADMINISTRADOR
 ************************************************************/
 
 function verificarAcessoPainel_() {
@@ -1641,16 +1464,21 @@ function verificarAcessoPainel_() {
     .toLowerCase()
     .trim();
 
+
   if (
     !email ||
     !EMAILS_AUTORIZADOS.includes(email)
   ) {
+
     throw new Error(
       "Acesso não autorizado. Entre com uma conta Google autorizada."
     );
+
   }
 
+
   return email;
+
 }
 
 
@@ -1675,11 +1503,17 @@ function doGet() {
   } catch (erro) {
 
     return HtmlService.createHtmlOutput(
+
       '<div style="font-family:Arial;text-align:center;padding:60px">' +
+
       '<h2>Acesso restrito</h2>' +
+
       '<p>Esta área é exclusiva para administradores autorizados.</p>' +
+
       '<p>Entre com a conta Google cadastrada para acessar o sistema.</p>' +
+
       '</div>'
+
     ).setTitle("Acesso restrito");
 
   }
@@ -1699,9 +1533,14 @@ function localizarGanhadorPainel_(ambiente) {
     "Histórico dos Sorteios"
   );
 
-  if (!historico) return null;
+
+  if (!historico) {
+    return null;
+  }
+
 
   const dados = historico.getDataRange().getValues();
+
 
   for (let i = dados.length - 1; i >= 1; i--) {
 
@@ -1711,14 +1550,19 @@ function localizarGanhadorPainel_(ambiente) {
     ) {
 
       return {
+
         nome: String(dados[i][3]),
+
         apartamento: String(dados[i][4]),
+
         data: dados[i][0]
+
       };
 
     }
 
   }
+
 
   return null;
 
@@ -1739,6 +1583,7 @@ function obterDadosPainel() {
 
   atualizarListas_(false);
 
+
   const nomesAbas = [
     "Gourmet – Natal",
     "Festas – Natal",
@@ -1746,9 +1591,11 @@ function obterDadosPainel() {
     "Festas – Ano Novo"
   ];
 
+
   const quantidades = [];
 
   const ganhadores = [];
+
 
   nomesAbas.forEach(ambiente => {
 
@@ -1764,9 +1611,13 @@ function obterDadosPainel() {
 
   });
 
+
   return {
+
     quantidades: quantidades,
+
     ganhadores: ganhadores
+
   };
 
 }
@@ -1782,19 +1633,24 @@ function executarSorteioPainel(indice) {
 
   indice = Number(indice);
 
+
   if (
     !Number.isInteger(indice) ||
     indice < 0 ||
     indice >= AMBIENTES_PAINEL.length
   ) {
+
     throw new Error("Ambiente inválido.");
+
   }
+
 
   const ambiente = AMBIENTES_PAINEL[indice];
 
   const resultado = sortearAmbiente_(ambiente);
 
   atualizarResultados_();
+
 
   return resultado;
 
@@ -1815,11 +1671,13 @@ function obterResultadosPainel() {
 
   atualizarResultados_();
 
+
   const aba = ss.getSheetByName(
     "Resultados dos Sorteios"
   );
 
   const dados = aba.getDataRange().getValues();
+
 
   return dados.slice(1).map(linha => ({
 
@@ -1830,11 +1688,13 @@ function obterResultadosPainel() {
     apartamento: String(linha[2] || ""),
 
     data: linha[3] instanceof Date
+
       ? Utilities.formatDate(
           linha[3],
           Session.getScriptTimeZone(),
           "dd/MM/yyyy HH:mm"
         )
+
       : "",
 
     situacao: String(linha[4] || "")
@@ -1856,20 +1716,24 @@ function obterHistoricoPainel() {
 
   criarAbas();
 
+
   const aba = ss.getSheetByName(
     "Histórico dos Sorteios"
   );
 
   const dados = aba.getDataRange().getValues();
 
+
   return dados.slice(1).map(linha => ({
 
     data: linha[0] instanceof Date
+
       ? Utilities.formatDate(
           linha[0],
           Session.getScriptTimeZone(),
           "dd/MM/yyyy HH:mm:ss"
         )
+
       : "",
 
     ambiente: String(linha[1] || ""),
@@ -1899,13 +1763,17 @@ function obterGanhadorPainel(indice) {
 
   indice = Number(indice);
 
+
   if (
     !Number.isInteger(indice) ||
     indice < 0 ||
     indice >= AMBIENTES_PAINEL.length
   ) {
+
     throw new Error("Ambiente inválido.");
+
   }
+
 
   return localizarGanhadorPainel_(
     AMBIENTES_PAINEL[indice]
@@ -1924,17 +1792,22 @@ function registrarDesistenciaPainel(indice) {
 
   indice = Number(indice);
 
+
   if (
     !Number.isInteger(indice) ||
     indice < 0 ||
     indice >= AMBIENTES_PAINEL.length
   ) {
+
     throw new Error("Ambiente inválido.");
+
   }
+
 
   const ambiente = AMBIENTES_PAINEL[indice];
 
   const bloqueio = LockService.getScriptLock();
+
 
   if (!bloqueio.tryLock(10000)) {
 
@@ -1944,9 +1817,13 @@ function registrarDesistenciaPainel(indice) {
 
   }
 
+
   try {
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    criarAbas();
+
 
     const historico = ss.getSheetByName(
       "Histórico dos Sorteios"
@@ -1954,7 +1831,9 @@ function registrarDesistenciaPainel(indice) {
 
     const dados = historico.getDataRange().getValues();
 
+
     let linhaGanhador = -1;
+
 
     for (let i = dados.length - 1; i >= 1; i--) {
 
@@ -1971,6 +1850,7 @@ function registrarDesistenciaPainel(indice) {
 
     }
 
+
     if (linhaGanhador < 0) {
 
       throw new Error(
@@ -1979,34 +1859,49 @@ function registrarDesistenciaPainel(indice) {
 
     }
 
+
     const ganhador = dados[linhaGanhador - 1];
+
 
     // Registrar a desistência no histórico.
 
     historico.getRange(linhaGanhador, 6)
       .setValue("Desistiu");
 
+
     historico.getRange(linhaGanhador, 7)
       .setValue(
+
         "Desistência registrada em " +
+
         Utilities.formatDate(
           new Date(),
           Session.getScriptTimeZone(),
           "dd/MM/yyyy HH:mm"
         )
+
       );
+
 
     // Realizar novo sorteio sem adquirir outro bloqueio.
 
-    const resultado = sortearAmbienteInterno_(ambiente);
+    const resultado =
+      sortearAmbienteInterno_(ambiente);
+
 
     atualizarResultados_();
 
+
     return (
+
       "DESISTÊNCIA REGISTRADA\n\n" +
+
       "Ganhador anterior: " + ganhador[3] +
+
       "\nApartamento: " + ganhador[4] +
+
       "\n\n" + resultado
+
     );
 
   } finally {
@@ -2018,4 +1913,3 @@ function registrarDesistenciaPainel(indice) {
   }
 
 }
-
