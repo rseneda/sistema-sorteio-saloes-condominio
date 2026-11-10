@@ -9,3 +9,22 @@ function fecharFormulario() {
     'As inscrições para o sorteio foram encerradas. O prazo terminou em 09/12/2026 às 23:59.'
   );
 }
+
+function agendarFechamentoFormulario() {
+  // Evita criar agendamentos duplicados
+  const gatilhos = ScriptApp.getProjectTriggers();
+
+  gatilhos.forEach(function(gatilho) {
+    if (gatilho.getHandlerFunction() === 'fecharFormulario') {
+      ScriptApp.deleteTrigger(gatilho);
+    }
+  });
+
+  // Data e horário do fechamento
+  const dataFechamento = new Date(2026, 11, 10, 0, 0, 0);
+
+  ScriptApp.newTrigger('fecharFormulario')
+    .timeBased()
+    .at(dataFechamento)
+    .create();
+}
